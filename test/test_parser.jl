@@ -5,15 +5,15 @@ mutable struct _ParserNeuron <: NGCSimLib.AbstractComponent
     name::String
     context_path::String
     args::Vector{Any}
-    kwargs::Dict{Symbol,Any}
+    kwargs::Dict{Symbol, Any}
     voltage::NGCSimLib.Compartment{Vector{Float64}}
     spikes::NGCSimLib.Compartment{Vector{Float64}}
 end
 
 _make_parser_neuron(name::String) = _ParserNeuron(
-    name, "", Any[], Dict{Symbol,Any}(),
+    name, "", Any[], Dict{Symbol, Any}(),
     NGCSimLib.Compartment(zeros(3)),
-    NGCSimLib.Compartment(zeros(3)),
+    NGCSimLib.Compartment(zeros(3))
 )
 
 # Register two @compilable methods on _ParserNeuron — body Exprs captured here.
@@ -24,7 +24,7 @@ end
 
 NGCSimLib.@compilable function _parser_reset!(c::_ParserNeuron)
     NGCSimLib.set!(c.voltage, zeros(3))
-    NGCSimLib.set!(c.spikes,  zeros(3))
+    NGCSimLib.set!(c.spikes, zeros(3))
     return c
 end
 
@@ -42,7 +42,7 @@ end
     @test comp.root_target == "p:voltage"
 
     # Non-compartment field resolves to nothing
-    @test NGCSimLib._resolve_field_chain(c, :(c.name))  === nothing
+    @test NGCSimLib._resolve_field_chain(c, :(c.name)) === nothing
 end
 
 @testset "ContextTransformer rewrites c.field → ctx[key]" begin
@@ -95,11 +95,11 @@ end
         x = kwargs[:lr] * y
         z = kwargs[:beta]
     end)
-    @test :lr   in keys
+    @test :lr in keys
     @test :beta in keys
     # The rewritten body should contain bare `lr` and `beta`, not `kwargs[…]`.
     src = string(rewritten)
-    @test occursin("lr",   src)
+    @test occursin("lr", src)
     @test occursin("beta", src)
     @test !occursin("kwargs[", src)
 end
@@ -129,9 +129,9 @@ end
     # Build a ctx dict pre-loaded with the current state and call the pure fn.
     # The Parser promotes all original positional args (after the receiver) to
     # required kwargs, so `dt` comes in via the kwargs-only path.
-    ctx = Dict{String,Any}(
+    ctx = Dict{String, Any}(
         "p:voltage" => [1.0, 2.0, 3.0],
-        "p:spikes"  => [0.0, 0.0, 0.0],
+        "p:spikes" => [0.0, 0.0, 0.0]
     )
     out = cm(ctx; dt=0.5)
     @test out === ctx                       # mutates + returns same dict
@@ -147,13 +147,13 @@ end
 
     bundle = NGCSimLib.compile_object!(c)
     @test :_parser_advance! in keys(bundle)
-    @test :_parser_reset!   in keys(bundle)
+    @test :_parser_reset! in keys(bundle)
     @test bundle[:_parser_advance!] isa NGCSimLib.CompiledMethod
-    @test bundle[:_parser_reset!]   isa NGCSimLib.CompiledMethod
+    @test bundle[:_parser_reset!] isa NGCSimLib.CompiledMethod
 
     # The reset method should rewrite TWO set!s — both keys present.
     @test "p:voltage" in bundle[:_parser_reset!].needed_keys
-    @test "p:spikes"  in bundle[:_parser_reset!].needed_keys
+    @test "p:spikes" in bundle[:_parser_reset!].needed_keys
 end
 
 @testset "get_compiled lazily compiles on first access" begin
@@ -187,6 +187,6 @@ end
     NGCSimLib.post_init!(c)
     cm = NGCSimLib.parse_method(c, :_parser_advance!)
     src = NGCSimLib.code(cm)
-    @test occursin("ctx",         src)
-    @test occursin("p:voltage",   src)
+    @test occursin("ctx", src)
+    @test occursin("p:voltage", src)
 end

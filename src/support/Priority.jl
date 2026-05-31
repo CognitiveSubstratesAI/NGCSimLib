@@ -18,7 +18,7 @@
 
 # IdDict keyed by object identity. Works for functions, methods, callable
 # structs alike. Mirrors the per-function _priority attribute upstream.
-const _PRIORITY_REGISTRY = IdDict{Any,Int}()
+const _PRIORITY_REGISTRY = IdDict{Any, Int}()
 
 # ── Public API ────────────────────────────────────────────────────────────────
 

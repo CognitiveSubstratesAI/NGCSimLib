@@ -22,11 +22,11 @@ mutable struct JointProcess <: AbstractProcess
     name::String
     context_path::String
     args::Vector{Any}
-    kwargs::Dict{Symbol,Any}
+    kwargs::Dict{Symbol, Any}
     keyword_order::Vector{Symbol}
     watch_list::Vector{Compartment}
     process_order::Vector{AbstractProcess}
-    compiled::Union{Nothing,CompiledRunner}   # see BaseProcess.CompiledRunner
+    compiled::Union{Nothing, CompiledRunner}   # see BaseProcess.CompiledRunner
 end
 
 """
@@ -40,11 +40,11 @@ function JointProcess(; name::AbstractString)
         String(name),
         "",
         Any[],
-        Dict{Symbol,Any}(),
+        Dict{Symbol, Any}(),
         Symbol[],
         Compartment[],
         AbstractProcess[],
-        nothing,
+        nothing
     )
     # JointProcess starts at priority -1 (matches upstream
     # `@priority(-1)` on BaseProcess; jointProcess.py:14 inherits and uses it).
@@ -63,7 +63,7 @@ upstream `JointProcess.then` (jointProcess.py:16-22).
 """
 function then!(jp::JointProcess, sub::AbstractProcess)
     sub_pri = get_priority(sub)
-    jp_pri  = get_priority(jp)
+    jp_pri = get_priority(jp)
     if sub_pri <= jp_pri
         priority!(jp, sub_pri - 1)
     end
@@ -95,7 +95,7 @@ upstream's mutation at jointProcess.py:53-57).
 Mirrors upstream `JointProcess._parse` (jointProcess.py:26-60).
 """
 function _parse!(jp::JointProcess)
-    steps = Tuple{AbstractComponent,Symbol}[]
+    steps = Tuple{AbstractComponent, Symbol}[]
     joint_watch = Compartment[]
     for sub in jp.process_order
         append!(steps, _parse!(sub))
@@ -120,8 +120,8 @@ end
 
 function Base.show(io::IO, jp::JointProcess)
     print(io, "JointProcess(name=\"", jp.name,
-          "\", subs=", length(jp.process_order),
-          ", compiled=", is_compiled(jp), ")")
+        "\", subs=", length(jp.process_order),
+        ", compiled=", is_compiled(jp), ")")
 end
 
 export JointProcess

@@ -2,11 +2,11 @@
 
 @testset "priority! registers and is read by get_priority" begin
     f = (x) -> x + 1
-    @test NGCSimLib.get_priority(f)  == 0         # unregistered default
+    @test NGCSimLib.get_priority(f) == 0         # unregistered default
     @test !NGCSimLib.has_priority(f)
     @test NGCSimLib.priority!(f, 5) === f          # returns fn unchanged
     @test NGCSimLib.get_priority(f) == 5
-    @test  NGCSimLib.has_priority(f)
+    @test NGCSimLib.has_priority(f)
 end
 
 @testset "explicit-zero distinguishable from unregistered" begin
@@ -20,12 +20,18 @@ end
 end
 
 @testset "registry handles named functions and callable structs" begin
-    function _named_fn(x); x; end
+    function _named_fn(x)
+        ;
+        x;
+    end
     NGCSimLib.priority!(_named_fn, 7)
     @test NGCSimLib.get_priority(_named_fn) == 7
 
     # callable struct
-    struct _CallableP; v::Int; end
+    struct _CallableP
+        ;
+        v::Int;
+    end
     (c::_CallableP)(x) = c.v + x
     inst = _CallableP(3)
     NGCSimLib.priority!(inst, 42)

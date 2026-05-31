@@ -25,7 +25,7 @@ end
     # Upstream `error()` raises errorCls(msg). Default Julia errortype is
     # ErrorException; caller can override via errortype kwarg.
     @test_throws ErrorException NGCSimLib.ngc_error("boom")
-    @test_throws ArgumentError  NGCSimLib.ngc_error("bad arg"; errortype=ArgumentError)
+    @test_throws ArgumentError NGCSimLib.ngc_error("bad arg"; errortype=ArgumentError)
 end
 
 @testset "ngc_critical raises ErrorException (errortype NOT configurable)" begin
@@ -51,7 +51,7 @@ end
     @test_throws ErrorException NGCSimLib.add_logging_level(:TRACE, 5)
     # custom_log on a registered level returns nothing (emits)
     @test NGCSimLib.custom_log("trace message", :TRACE) === nothing
-    @test NGCSimLib.custom_log("trace message", 5)     === nothing
+    @test NGCSimLib.custom_log("trace message", 5) === nothing
     # Unregistered level → warn-and-skip, returns nothing without raising
     @test NGCSimLib.custom_log("ignored", :NONEXISTENT) === nothing
     # No level supplied → warn-and-skip

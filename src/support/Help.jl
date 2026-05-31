@@ -30,12 +30,12 @@ code that pickle-style serialises by name.
     GuideWiring
 end
 
-const _GUIDE_STR = Dict{GuideKind,String}(
-    GuideInput      => "input",
-    GuideOutput     => "output",
+const _GUIDE_STR = Dict{GuideKind, String}(
+    GuideInput => "input",
+    GuideOutput => "output",
     GuideParameters => "params",
     GuideMonitoring => "monitoring",
-    GuideWiring     => "wiring",
+    GuideWiring => "wiring"
 )
 
 guide_string(g::GuideKind) = _GUIDE_STR[g]
@@ -44,7 +44,7 @@ guide_string(g::GuideKind) = _GUIDE_STR[g]
 
 # Descend a nested Dict along a `/`-separated path. Returns `nothing` if any
 # step is missing — emulates upstream `data.get(part, None)` chain.
-function _walk(data::Union{Nothing,AbstractDict}, section_path::AbstractString)
+function _walk(data::Union{Nothing, AbstractDict}, section_path::AbstractString)
     cursor = data
     cursor === nothing && return nothing
     parts = split(section_path, '/'; keepempty=false)
@@ -75,9 +75,9 @@ Render a titled "section" of a help dict. Walks `data` along `section_path`
 Mirrors upstream `_HelpSection.write` (help.py:4-29).
 """
 function _help_section(data, section_path::AbstractString,
-                       section_title::AbstractString,
-                       blank_msg::AbstractString;
-                       indent::Int=1)
+    section_title::AbstractString,
+    blank_msg::AbstractString;
+    indent::Int=1)
     target = _walk(data, section_path)
     pad = "\t" ^ indent
     if target === nothing || (target isa AbstractDict && isempty(target))
@@ -100,9 +100,15 @@ end
 # These mirror upstream module-level `_input_section`, `_output_section`,
 # `_param_section` (help.py:45-55). Pure data — looked up by render_guide.
 
-const _INPUT_SECTION  = ("compartments/inputs",  "Input Compartments",     "There are no required inputs")
-const _OUTPUT_SECTION = ("compartments/outputs", "Output Compartments",    "There are no expected outputs")
-const _PARAM_SECTION  = ("hyperparameters",      "Hyperparameters",        "There are no required hyperparameters")
+const _INPUT_SECTION = (
+    "compartments/inputs", "Input Compartments", "There are no required inputs"
+)
+const _OUTPUT_SECTION = (
+    "compartments/outputs", "Output Compartments", "There are no expected outputs"
+)
+const _PARAM_SECTION = (
+    "hyperparameters", "Hyperparameters", "There are no required hyperparameters"
+)
 
 # ── Guide-level rendering ─────────────────────────────────────────────────────
 
@@ -110,12 +116,12 @@ const _PARAM_SECTION  = ("hyperparameters",      "Hyperparameters",        "Ther
 # Mirrors upstream `Guides.__inputs/__outputs/__params/__monitoring/__wiring`
 # (help.py:84-90). NB: the trailing-comma bug on `__monitoring` is NOT ported —
 # we render the same single section as upstream INTENDED (the output section).
-const _GUIDE_CONFIG = Dict{GuideKind,Tuple{String,Vector{Tuple{String,String,String}}}}(
-    GuideInput       => ("Input Guide",      [_INPUT_SECTION]),
-    GuideOutput      => ("Output Guide",     [_OUTPUT_SECTION]),
-    GuideParameters  => ("Parameter Guide",  [_PARAM_SECTION]),
-    GuideMonitoring  => ("Monitoring Guide", [_OUTPUT_SECTION]),
-    GuideWiring      => ("Wiring Guide",     [_INPUT_SECTION, _OUTPUT_SECTION]),
+const _GUIDE_CONFIG = Dict{GuideKind, Tuple{String, Vector{Tuple{String, String, String}}}}(
+    GuideInput => ("Input Guide", [_INPUT_SECTION]),
+    GuideOutput => ("Output Guide", [_OUTPUT_SECTION]),
+    GuideParameters => ("Parameter Guide", [_PARAM_SECTION]),
+    GuideMonitoring => ("Monitoring Guide", [_OUTPUT_SECTION]),
+    GuideWiring => ("Wiring Guide", [_INPUT_SECTION, _OUTPUT_SECTION])
 )
 
 """
@@ -146,13 +152,13 @@ populates `self.inputs`, `self.outputs`, `self.monitoring`, `self.params`,
 """
 function guides(data::AbstractDict)
     return (
-        inputs     = render_guide(data, GuideInput),
-        outputs    = render_guide(data, GuideOutput),
-        params     = render_guide(data, GuideParameters),
-        monitoring = render_guide(data, GuideMonitoring),
-        wiring     = render_guide(data, GuideWiring),
+        inputs=render_guide(data, GuideInput),
+        outputs=render_guide(data, GuideOutput),
+        params=render_guide(data, GuideParameters),
+        monitoring=render_guide(data, GuideMonitoring),
+        wiring=render_guide(data, GuideWiring)
     )
 end
 
 export GuideKind, GuideInput, GuideOutput, GuideParameters, GuideMonitoring,
-       GuideWiring, guide_string, render_guide, guides
+    GuideWiring, guide_string, render_guide, guides

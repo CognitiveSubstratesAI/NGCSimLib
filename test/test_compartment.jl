@@ -3,24 +3,24 @@
 @testset "Compartment construction defaults" begin
     c = NGCSimLib.Compartment([0.0, 0.0])
     @test c.initial_value == [0.0, 0.0]
-    @test c.name        === nothing
+    @test c.name === nothing
     @test c.root_target === nothing
-    @test c.target      === nothing
-    @test c.auto_save   == true
+    @test c.target === nothing
+    @test c.auto_save == true
     # accessors agree with fields
-    @test NGCSimLib.root(c)     === nothing
+    @test NGCSimLib.root(c) === nothing
     @test NGCSimLib.targeted(c) == true   # target === nothing → not String, so targeted=true
-    @test NGCSimLib.target(c)   === nothing
+    @test NGCSimLib.target(c) === nothing
 end
 
 @testset "setup! → root_target + auto-default target + global state write" begin
     NGCSimLib.reset_global_state!()
     c = NGCSimLib.Compartment([1.0, 2.0, 3.0])
     NGCSimLib.setup!(c, "voltage", "net.layer")
-    @test c.name        == "voltage"
+    @test c.name == "voltage"
     @test c.root_target == "net.layer:voltage"
-    @test c.target      == "net.layer:voltage"
-    @test NGCSimLib.root(c)     == "net.layer:voltage"
+    @test c.target == "net.layer:voltage"
+    @test NGCSimLib.root(c) == "net.layer:voltage"
     @test NGCSimLib.targeted(c) == false
     # initial value pushed into global state
     @test NGCSimLib.from_global_key("net.layer:voltage") == [1.0, 2.0, 3.0]
@@ -85,9 +85,9 @@ end
     # Both orders work via multiple dispatch (no upstream __rsub__ bug)
     @test (a + b) == 7.0
     @test (a - b) == -1.0
-    @test (b - a) ==  1.0
-    @test (5 - a) ==  2.0          # reverse-op correctness
-    @test (a * 2) ==  6.0
+    @test (b - a) == 1.0
+    @test (5 - a) == 2.0          # reverse-op correctness
+    @test (a * 2) == 6.0
     @test (a < b) == true
     @test (a == 3.0) == true
 end

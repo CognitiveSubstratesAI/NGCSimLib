@@ -27,7 +27,9 @@ end
     # NGCSimLib exports `NGCSIMLIB_VERSION` — we'll look up something we know exists.
     # The first-char-capitalise rule means "ngcSimLib" lookup would become "NgcSimLib",
     # which doesn't exist. So pick an attribute whose first char is already upper.
-    v = NGCSimLib.load_attribute("NGCSIMLIB_VERSION"; module_path="NGCSimLib", match_case=true)
+    v = NGCSimLib.load_attribute(
+        "NGCSIMLIB_VERSION"; module_path="NGCSimLib", match_case=true
+    )
     @test v == NGCSimLib.NGCSIMLIB_VERSION
 end
 
@@ -35,8 +37,11 @@ end
     NGCSimLib.reset_module_caches!()
     # Define a temp module with a CamelCase export
     Core.eval(Main, :(module _LoadAttrProbeMod
-        struct RateCell; v::Int; end
-        export RateCell
+    struct RateCell
+        ;
+        v::Int;
+    end
+    export RateCell
     end))
     # Calling load_attribute("rateCell") should look up "RateCell" via the
     # first-char-upper rule.
@@ -46,5 +51,7 @@ end
 
 @testset "load_attribute raises on missing attribute" begin
     NGCSimLib.reset_module_caches!()
-    @test_throws ErrorException NGCSimLib.load_attribute("DoesNotExist"; module_path="NGCSimLib", match_case=true)
+    @test_throws ErrorException NGCSimLib.load_attribute(
+        "DoesNotExist"; module_path="NGCSimLib", match_case=true
+    )
 end

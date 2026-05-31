@@ -6,15 +6,15 @@ mutable struct _CtxNeuron <: NGCSimLib.AbstractComponent
     name::String
     context_path::String
     args::Vector{Any}
-    kwargs::Dict{Symbol,Any}
+    kwargs::Dict{Symbol, Any}
     voltage::NGCSimLib.Compartment{Vector{Float64}}
     spikes::NGCSimLib.Compartment{Vector{Float64}}
 end
 
 _make_neuron(name::String) = _CtxNeuron(
-    name, "", Any[], Dict{Symbol,Any}(),
+    name, "", Any[], Dict{Symbol, Any}(),
     NGCSimLib.Compartment(zeros(3)),
-    NGCSimLib.Compartment(zeros(3)),
+    NGCSimLib.Compartment(zeros(3))
 )
 
 # ── ContextManager ────────────────────────────────────────────────────────────
@@ -24,21 +24,21 @@ _make_neuron(name::String) = _CtxNeuron(
     cm1 = NGCSimLib.context_manager()
     cm2 = NGCSimLib.context_manager()
     @test cm1 === cm2
-    @test NGCSimLib.current_path()       == ""
-    @test NGCSimLib.current_context()    === nothing
-    @test NGCSimLib.current_location()   == ""
+    @test NGCSimLib.current_path() == ""
+    @test NGCSimLib.current_context() === nothing
+    @test NGCSimLib.current_location() == ""
 end
 
 @testset "path arithmetic: join / split / append" begin
     NGCSimLib.clear_contexts!()
     cm = NGCSimLib.context_manager()
-    @test NGCSimLib.join_path(cm, "foo:bar")           == "foo:bar"
-    @test NGCSimLib.join_path(cm, ["foo","bar"])       == "foo:bar"
-    @test NGCSimLib.split_path(cm, "foo:bar:baz")      == ["foo","bar","baz"]
-    @test NGCSimLib.split_path(cm, "")                 == String[]
-    @test NGCSimLib.append_path(cm; addition="a")      == "a"     # empty root
+    @test NGCSimLib.join_path(cm, "foo:bar") == "foo:bar"
+    @test NGCSimLib.join_path(cm, ["foo", "bar"]) == "foo:bar"
+    @test NGCSimLib.split_path(cm, "foo:bar:baz") == ["foo", "bar", "baz"]
+    @test NGCSimLib.split_path(cm, "") == String[]
+    @test NGCSimLib.append_path(cm; addition="a") == "a"     # empty root
     @test NGCSimLib.append_path(cm; root="x", addition="y") == "x:y"
-    @test NGCSimLib.append_path(cm; root="x")          == "x"     # no addition
+    @test NGCSimLib.append_path(cm; root="x") == "x"     # no addition
 end
 
 @testset "step! / step_back! / step_to! mutate the path" begin
@@ -109,7 +109,7 @@ end
         # Inside the block, before exit:
         @test cell.context_path == "net"
         @test cell.voltage.root_target == "net:layer1:voltage"
-        @test cell.spikes.root_target  == "net:layer1:spikes"
+        @test cell.spikes.root_target == "net:layer1:spikes"
         # Global state has the keys
         @test NGCSimLib.check_key("net:layer1:voltage")
         @test NGCSimLib.check_key("net:layer1:spikes")
@@ -126,7 +126,7 @@ end
 
     NGCSimLib.Context("net") do ctx
         cell = NGCSimLib.@context_aware _make_neuron("auto1")
-        @test cell.context_path        == "net"
+        @test cell.context_path == "net"
         @test cell.voltage.root_target == "net:auto1:voltage"
         @test haskey(NGCSimLib.get_components(ctx), "auto1")
     end
@@ -139,7 +139,7 @@ end
     NGCSimLib.post_init!(cell)
     @test cell.context_path == ""    # no active context
     @test cell.voltage.root_target == "orphan:voltage"   # bare name as prefix
-    @test cell.spikes.root_target  == "orphan:spikes"
+    @test cell.spikes.root_target == "orphan:spikes"
     # No Context was active, so nothing got registered anywhere.
     @test NGCSimLib.current_context() === nothing
 end
@@ -149,8 +149,10 @@ end
     NGCSimLib.reset_global_state!()
 
     NGCSimLib.Context("net") do ctx
-        a = _make_neuron("a"); NGCSimLib.post_init!(a)
-        b = _make_neuron("b"); NGCSimLib.post_init!(b)
+        a = _make_neuron("a");
+        NGCSimLib.post_init!(a)
+        b = _make_neuron("b");
+        NGCSimLib.post_init!(b)
         # Wire a.voltage >> b.voltage  (source >> dest)
         a.voltage >> b.voltage
         # The Context now has a recorded connection
@@ -165,7 +167,8 @@ end
     NGCSimLib.clear_contexts!()
     NGCSimLib.reset_global_state!()
     NGCSimLib.Context("net") do ctx
-        c = _make_neuron("x"); NGCSimLib.post_init!(c)
+        c = _make_neuron("x");
+        NGCSimLib.post_init!(c)
         # Should run without error even though `compile!` isn't defined
         NGCSimLib.recompile!(ctx)
         @test true   # if we got here, the walk succeeded

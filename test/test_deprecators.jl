@@ -19,7 +19,7 @@ end
     # Original: receives `new_name`, returns it
     orig = (; new_name=:default, kept=:k) -> (new_name, kept)
     wrapped = NGCSimLib.deprecate_args(orig;
-        renames = Dict(:old_name => :new_name, :gone => nothing))
+        renames=Dict(:old_name => :new_name, :gone => nothing))
     @test NGCSimLib.is_deprecated(wrapped)
 
     # Rename path — old_name forwarded as new_name
@@ -34,7 +34,7 @@ end
     orig = (; old_name=nothing) -> old_name
     wrapped = NGCSimLib.deprecate_args(orig;
         rebind=false,
-        renames = Dict(:old_name => :new_name))
+        renames=Dict(:old_name => :new_name))
     # rebind=false → old kwarg is NOT dropped; original still receives it
     @test wrapped(; old_name=:still_here) == :still_here
 end
@@ -42,5 +42,5 @@ end
 @testset "deprecate_args rejects bad rename values" begin
     orig = (; x=1) -> x
     @test_throws ErrorException NGCSimLib.deprecate_args(orig;
-        renames = Dict(:old => 42))   # 42 is neither nothing nor symbol/string
+        renames=Dict(:old => 42))   # 42 is neither nothing nor symbol/string
 end

@@ -135,7 +135,7 @@ function pack_keywords(p::AbstractProcess; row_seed=nothing, kwargs...)
         if v isa Function
             row_seed === nothing &&
                 ngc_error("pack_keywords: key `", key,
-                          "` is callable but no row_seed was provided")
+                    "` is callable but no row_seed was provided")
             push!(out, v(row_seed))
         else
             push!(out, v)
@@ -152,7 +152,7 @@ Produce `length` rows, each generated via `pack_keywords(p; row_seed=seed_genera
 Mirrors upstream `pack_rows` (baseProcess.py:88-106).
 """
 function pack_rows(p::AbstractProcess, length::Integer;
-                   seed_generator=identity, kwargs...)
+    seed_generator=identity, kwargs...)
     return [pack_keywords(p; row_seed=seed_generator(i), kwargs...) for i in 1:length]
 end
 
@@ -174,17 +174,17 @@ Defaults:
 Throws if not yet compiled.
 """
 function run(p::AbstractProcess;
-             state::Union{Nothing,AbstractDict}=nothing,
-             keywords::Union{Nothing,AbstractVector}=nothing,
-             update::Bool=true,
-             row_seed=nothing,
-             kwargs...)
+    state::Union{Nothing, AbstractDict}=nothing,
+    keywords::Union{Nothing, AbstractVector}=nothing,
+    update::Bool=true,
+    row_seed=nothing,
+    kwargs...)
     is_compiled(p) ||
         ngc_error("run: process `", p.name,
-                  "` has not been compiled — call compile_process!(p) or finish",
-                  " the enclosing Context block first")
+            "` has not been compiled — call compile_process!(p) or finish",
+            " the enclosing Context block first")
     ctx = state === nothing ? get_state() : state
-    kw  = keywords === nothing ? pack_keywords(p; row_seed=row_seed, kwargs...) : keywords
+    kw = keywords === nothing ? pack_keywords(p; row_seed=row_seed, kwargs...) : keywords
     new_ctx, watched = p.compiled(ctx, kw)
     if update
         set_state!(new_ctx)
@@ -238,25 +238,26 @@ function compile_process!(p::AbstractProcess)
 
     # Sequential runner — pure function over (ctx, loop_args).
     # `loop_args` is the Vector of values in `keyword_order` order.
-    eager_runner = (ctx::AbstractDict, loop_args::AbstractVector) -> begin
-        # Build the per-call name → value map once.
-        kw_pairs = Pair{Symbol,Any}[]
-        for (i, k) in enumerate(keyword_order_local)
-            push!(kw_pairs, k => loop_args[i])
-        end
-        kw_full = Dict{Symbol,Any}(kw_pairs)
+    eager_runner =
+        (ctx::AbstractDict, loop_args::AbstractVector) -> begin
+            # Build the per-call name → value map once.
+            kw_pairs = Pair{Symbol, Any}[]
+            for (i, k) in enumerate(keyword_order_local)
+                push!(kw_pairs, k => loop_args[i])
+            end
+            kw_full = Dict{Symbol, Any}(kw_pairs)
 
-        out_ctx = ctx
-        for (si, (c, m)) in enumerate(steps)
-            cm = get_compiled(c, m)
-            # Pass only the kwargs this step's signature actually accepts.
-            step_kw = (; (k => kw_full[k] for k in step_kwargs[si])...)
-            out_ctx = cm.fn(out_ctx; step_kw...)
+            out_ctx = ctx
+            for (si, (c, m)) in enumerate(steps)
+                cm = get_compiled(c, m)
+                # Pass only the kwargs this step's signature actually accepts.
+                step_kw = (; (k => kw_full[k] for k in step_kwargs[si])...)
+                out_ctx = cm.fn(out_ctx; step_kw...)
+            end
+            # Watched tuple: final values of every compartment in watch_list
+            watched_vals = Tuple(out_ctx[w.root_target] for w in watched)
+            return (out_ctx, watched_vals)
         end
-        # Watched tuple: final values of every compartment in watch_list
-        watched_vals = Tuple(out_ctx[w.root_target] for w in watched)
-        return (out_ctx, watched_vals)
-    end
     p.compiled = CompiledRunner(eager_runner)
 
     return p
@@ -284,8 +285,8 @@ Throws on first-call shape mismatch. To recompile against different
 shapes, call `compile_process!(p)` (reverts to eager) then re-run this.
 """
 function compile_with_reactant!(p::AbstractProcess,
-                                sample_ctx::AbstractDict,
-                                sample_loop_args::AbstractVector)
+    sample_ctx::AbstractDict,
+    sample_loop_args::AbstractVector)
     is_compiled(p) || compile_process!(p)
     eager_runner = p.compiled   # CompiledRunner wrapping the eager closure
     # `@compile` is a Reactant macro — it expands at parse time using the
@@ -336,6 +337,6 @@ function post_init!(p::AbstractProcess)
 end
 
 export AbstractProcess, CompiledRunner,
-       watch_list, keyword_order, is_compiled,
-       watch!, pack_keywords, pack_rows,
-       run, compile_process!, compile_with_reactant!, view_compiled
+    watch_list, keyword_order, is_compiled,
+    watch!, pack_keywords, pack_rows,
+    run, compile_process!, compile_with_reactant!, view_compiled

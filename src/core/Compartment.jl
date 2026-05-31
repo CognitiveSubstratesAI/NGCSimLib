@@ -35,12 +35,12 @@ key is `"<owner_path>:<name>"` and reads/writes go through `GlobalState`.
 """
 mutable struct Compartment{T} <: AbstractCompartmentLike
     initial_value::T
-    name::Union{String,Nothing}
-    root_target::Union{String,Nothing}
-    target::Union{Nothing,String,AbstractValueNode}
-    display_name::Union{String,Nothing}
-    units::Union{String,Nothing}
-    plot_method::Union{Function,Nothing}
+    name::Union{String, Nothing}
+    root_target::Union{String, Nothing}
+    target::Union{Nothing, String, AbstractValueNode}
+    display_name::Union{String, Nothing}
+    units::Union{String, Nothing}
+    plot_method::Union{Function, Nothing}
     auto_save::Bool
 end
 
@@ -53,12 +53,12 @@ to global state until `setup!` is called. Mirrors upstream `__init__`
 (compartment.py:39-54).
 """
 function Compartment(initial_value::T;
-                     display_name::Union{String,Nothing}=nothing,
-                     units::Union{String,Nothing}=nothing,
-                     plot_method::Union{Function,Nothing}=nothing,
-                     auto_save::Bool=true) where {T}
+    display_name::Union{String, Nothing}=nothing,
+    units::Union{String, Nothing}=nothing,
+    plot_method::Union{Function, Nothing}=nothing,
+    auto_save::Bool=true) where {T}
     return Compartment{T}(initial_value, nothing, nothing, nothing,
-                          display_name, units, plot_method, auto_save)
+        display_name, units, plot_method, auto_save)
 end
 
 # ── Property-style accessors (Julia idiom: functions, not @property) ──────────
@@ -104,7 +104,7 @@ function target!(c::Compartment, value)
         c.target = value
     else
         ngc_error("Compartment target must be String, AbstractOp, or Compartment; got ",
-                  typeof(value))
+            typeof(value))
     end
     return c
 end
@@ -152,7 +152,7 @@ function set!(c::Compartment, value)
     end
     if !(c.target isa AbstractString) || c.target != c.root_target
         ngc_warn("Attempting to set ", c.target, " in ", c.root_target,
-                 ". Aborting!")
+            ". Aborting!")
         return nothing
     end
     # c.target == c.root_target — write own slot.
@@ -166,7 +166,7 @@ function _split_root(key::AbstractString)
     idx = findfirst(':', key)
     idx === nothing && ngc_error("Compartment.root has no ':'; got `", key, "`")
     return (String(SubString(key, 1, prevind(key, idx))),
-            String(SubString(key, nextind(key, idx))))
+        String(SubString(key, nextind(key, idx))))
 end
 
 """
@@ -239,13 +239,13 @@ unwrap(x) = x
 # Generate Base.<op>(::AbstractValueNode, ::Any) etc. for every dunder in
 # upstream `_BINARY_OPS` (compartmentMeta.py:11-29).
 const _COMPARTMENT_BINARY_OPS = (:+, :-, :*, :/, :÷, :%, :^, :&, :⊻, :|,
-                                  :(==), :!=, :<, :<=, :>, :>=)
+    :(==), :!=, :<, :<=, :>, :>=)
 
 for op in _COMPARTMENT_BINARY_OPS
     @eval begin
         Base.$op(a::AbstractValueNode, b::AbstractValueNode) = $op(unwrap(a), unwrap(b))
-        Base.$op(a::AbstractValueNode, b)                    = $op(unwrap(a), unwrap(b))
-        Base.$op(a, b::AbstractValueNode)                    = $op(unwrap(a), unwrap(b))
+        Base.$op(a::AbstractValueNode, b) = $op(unwrap(a), unwrap(b))
+        Base.$op(a, b::AbstractValueNode) = $op(unwrap(a), unwrap(b))
     end
 end
 
@@ -283,5 +283,6 @@ function Base.show(io::IO, c::Compartment)
     print(io, ", value=", get_value(c), ")")
 end
 
-export Compartment, root, targeted, target, target!, setup!, set!, get_value,
-       get_needed_keys, unwrap, wire!
+export Compartment,
+    root, targeted, target, target!, setup!, set!, get_value,
+    get_needed_keys, unwrap, wire!

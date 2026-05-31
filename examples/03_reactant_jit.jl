@@ -26,7 +26,7 @@ mutable struct JITNeuron <: NGCSimLib.AbstractComponent
     name::String
     context_path::String
     args::Vector{Any}
-    kwargs::Dict{Symbol,Any}
+    kwargs::Dict{Symbol, Any}
     voltage::NGCSimLib.Compartment
 end
 
@@ -41,12 +41,12 @@ end
 # Build under a Context, using Reactant arrays for the Compartment values.
 NGCSimLib.Context("net") do _ctx
     cell = JITNeuron(
-        "layer1", "", Any[], Dict{Symbol,Any}(),
-        NGCSimLib.Compartment(Reactant.ConcreteRArray([1.0, 2.0, 3.0])),
+        "layer1", "", Any[], Dict{Symbol, Any}(),
+        NGCSimLib.Compartment(Reactant.ConcreteRArray([1.0, 2.0, 3.0]))
     )
     NGCSimLib.post_init!(cell)
 
-    process = NGCSimLib.MethodProcess(name="step")
+    process = NGCSimLib.MethodProcess(; name="step")
     process >> (cell, :advance!)
     NGCSimLib.post_init!(process)
 end
@@ -58,8 +58,8 @@ NGCSimLib.compile_process!(process)
 @info "1. Eager runner ready" runner = process.compiled
 
 # 2. Build sample args matching the shapes/types Reactant should trace against.
-sample_ctx       = Dict{String,Any}(
-    "net:layer1:voltage" => Reactant.ConcreteRArray([1.0, 2.0, 3.0]),
+sample_ctx = Dict{String, Any}(
+    "net:layer1:voltage" => Reactant.ConcreteRArray([1.0, 2.0, 3.0])
 )
 sample_loop_args = Any[Reactant.ConcreteRArray(0.5)]   # dt
 

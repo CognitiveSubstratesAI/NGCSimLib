@@ -17,8 +17,8 @@
 
 # ── Caches (module-level, monotonically growing — same as upstream) ───────────
 
-const _LOADED_MODULES    = Dict{String,Module}()
-const _LOADED_ATTRIBUTES = Dict{String,Any}()
+const _LOADED_MODULES = Dict{String, Module}()
+const _LOADED_ATTRIBUTES = Dict{String, Any}()
 
 # Walk all reachable modules from `root`, including nested submodules.
 # Used by load_module to emulate Python's `sys.modules` — any module that has
@@ -53,7 +53,7 @@ otherwise returns `false`. `required === nothing` returns `true` immediately.
 
 Mirrors upstream `check_attributes` (modules.py:10-40).
 """
-function check_attributes(obj, required::Union{Nothing,AbstractVector}; fatal::Bool=false)
+function check_attributes(obj, required::Union{Nothing, AbstractVector}; fatal::Bool=false)
     required === nothing && return true
     objname = hasproperty(obj, :name) ? getproperty(obj, :name) : string(obj)
     for raw in required
@@ -84,11 +84,11 @@ Caches resolutions in `_LOADED_MODULES`. Raises an `ErrorException` (upstream
 (modules.py:43-87).
 """
 function load_module(module_path::AbstractString;
-                     match_case::Bool=false,
-                     absolute_path::Bool=false)
+    match_case::Bool=false,
+    absolute_path::Bool=false)
     haskey(_LOADED_MODULES, module_path) && return _LOADED_MODULES[module_path]
 
-    mod::Union{Nothing,Module} = nothing
+    mod::Union{Nothing, Module} = nothing
     if absolute_path
         # User opts in to "this is a registered package name".
         pkgid = Base.identify_package(String(module_path))
@@ -105,7 +105,7 @@ function load_module(module_path::AbstractString;
         end
         _walk_modules(Main, candidates)
         for m in candidates
-            last      = string(nameof(m))
+            last = string(nameof(m))
             last_norm = match_case ? last : lowercase(last)
             if final_norm == last_norm
                 ngc_info("Loading module from ", string(m))
@@ -136,9 +136,9 @@ Caches in `_LOADED_ATTRIBUTES`. Raises on miss. Mirrors upstream
 `load_attribute` (modules.py:120-165).
 """
 function load_attribute(attribute_name::AbstractString;
-                        module_path::Union{Nothing,AbstractString}=nothing,
-                        match_case::Bool=false,
-                        absolute_path::Bool=false)
+    module_path::Union{Nothing, AbstractString}=nothing,
+    match_case::Bool=false,
+    absolute_path::Bool=false)
     haskey(_LOADED_ATTRIBUTES, attribute_name) && return _LOADED_ATTRIBUTES[attribute_name]
 
     mp = module_path === nothing ? attribute_name : module_path
@@ -147,9 +147,14 @@ function load_attribute(attribute_name::AbstractString;
     name = if match_case
         attribute_name
     else
-        isempty(attribute_name) ?
-            ngc_error("load_attribute: attribute_name is empty") :
-            string(uppercase(attribute_name[1:1]), attribute_name[nextind(attribute_name,1):end])
+        if isempty(attribute_name)
+            ngc_error("load_attribute: attribute_name is empty")
+        else
+            string(
+                uppercase(attribute_name[1:1]),
+                attribute_name[nextind(attribute_name, 1):end]
+            )
+        end
     end
 
     attr = try
@@ -175,26 +180,26 @@ Otherwise, treats the whole `path` as both module name and attribute name.
 Mirrors upstream `load_from_path` (modules.py:90-117).
 """
 function load_from_path(path::AbstractString;
-                        match_case::Bool=false,
-                        absolute_path::Bool=false)
+    match_case::Bool=false,
+    absolute_path::Bool=false)
     if absolute_path
         idx = findlast('.', path)
         if idx === nothing
             module_name = path
-            attr_name   = path
+            attr_name = path
         else
             module_name = String(path[1:prevind(path, idx)])
-            attr_name   = String(path[nextind(path, idx):end])
+            attr_name = String(path[nextind(path, idx):end])
         end
         return load_attribute(attr_name;
-                              module_path  = module_name,
-                              match_case   = true,
-                              absolute_path= true)
+            module_path=module_name,
+            match_case=true,
+            absolute_path=true)
     else
         return load_attribute(path;
-                              module_path  = path,
-                              match_case   = match_case,
-                              absolute_path= false)
+            module_path=path,
+            match_case=match_case,
+            absolute_path=false)
     end
 end
 
@@ -213,4 +218,4 @@ function reset_module_caches!()
 end
 
 export check_attributes, load_module, load_attribute, load_from_path,
-       reset_module_caches!
+    reset_module_caches!

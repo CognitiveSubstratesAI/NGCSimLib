@@ -16,7 +16,7 @@
 # ── Registries (introspection back-pointers) ──────────────────────────────────
 
 # wrapper → original callable. `is_deprecated(wrapper)` becomes a haskey check.
-const _DEPRECATED_REGISTRY = IdDict{Any,Any}()
+const _DEPRECATED_REGISTRY = IdDict{Any, Any}()
 
 # ── Predicate / lookup helpers ────────────────────────────────────────────────
 
@@ -86,39 +86,49 @@ function deprecate_args(fn; rebind::Bool=true, renames::AbstractDict)
     name = string(fn)
     # Normalize keys to Symbol so callers can pass either Dict{Symbol,...} or
     # Dict{String,...}. Values can be Nothing, Symbol, or AbstractString.
-    norm = Dict{Symbol,Any}()
+    norm = Dict{Symbol, Any}()
     for (k, v) in renames
         kk = k isa Symbol ? k : Symbol(k)
-        vv = v === nothing ? nothing :
-             v isa Symbol     ? v :
-             v isa AbstractString ? Symbol(v) :
-             ngc_error("deprecate_args: rename value for `", kk, "` must be Symbol, AbstractString, or nothing")
+        vv = if v === nothing
+            nothing
+        elseif v isa Symbol
+            v
+        elseif v isa AbstractString
+            Symbol(v)
+        else
+            ngc_error(
+                "deprecate_args: rename value for `",
+                kk,
+                "` must be Symbol, AbstractString, or nothing"
+            )
+        end
         norm[kk] = vv
     end
 
-    wrapped = (args...; kwargs...) -> begin
-        # `kwargs` is a NamedTuple-like Iterators.Pairs; rebuild as a Dict so
-        # we can mutate. Then splat back into `fn`.
-        kw = Dict{Symbol,Any}(pairs(kwargs))
-        for (oldname, newname) in norm
-            if haskey(kw, oldname)
-                if newname === nothing
-                    ngc_warn("The argument \"", oldname, "\" is deprecated for ",
-                             name, ", and will no longer be supported")
-                else
-                    ngc_warn("The argument \"", oldname, "\" is deprecated for ",
-                             name, ", use \"", newname, "\" instead")
-                end
-                if rebind
-                    if newname !== nothing
-                        kw[newname] = kw[oldname]
+    wrapped =
+        (args...; kwargs...) -> begin
+            # `kwargs` is a NamedTuple-like Iterators.Pairs; rebuild as a Dict so
+            # we can mutate. Then splat back into `fn`.
+            kw = Dict{Symbol, Any}(pairs(kwargs))
+            for (oldname, newname) in norm
+                if haskey(kw, oldname)
+                    if newname === nothing
+                        ngc_warn("The argument \"", oldname, "\" is deprecated for ",
+                            name, ", and will no longer be supported")
+                    else
+                        ngc_warn("The argument \"", oldname, "\" is deprecated for ",
+                            name, ", use \"", newname, "\" instead")
                     end
-                    delete!(kw, oldname)
+                    if rebind
+                        if newname !== nothing
+                            kw[newname] = kw[oldname]
+                        end
+                        delete!(kw, oldname)
+                    end
                 end
             end
+            return fn(args...; kw...)
         end
-        return fn(args...; kw...)
-    end
     _DEPRECATED_REGISTRY[wrapped] = fn
     return wrapped
 end

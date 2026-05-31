@@ -23,17 +23,17 @@ Process-wide registry of every `Context` plus the mutable "current path"
 that determines which Context auto-captures newly-constructed components.
 """
 mutable struct ContextManager
-    contexts::Dict{String,AbstractContext}
+    contexts::Dict{String, AbstractContext}
     current_path::Vector{String}
     separator::String
     lock::ReentrantLock
 end
 
 ContextManager(separator::AbstractString=":") = ContextManager(
-    Dict{String,AbstractContext}(),
+    Dict{String, AbstractContext}(),
     String[],
     String(separator),
-    ReentrantLock(),
+    ReentrantLock()
 )
 
 # ── Singleton (OncePerProcess) ────────────────────────────────────────────────
@@ -50,7 +50,9 @@ end
 Join `path` (or the current path if `nothing`) into a colon-string. Mirrors
 upstream `join_path` (context_manager.py:120-133).
 """
-function join_path(cm::ContextManager, path::Union{Nothing,AbstractString,AbstractVector}=nothing)
+function join_path(
+    cm::ContextManager, path::Union{Nothing, AbstractString, AbstractVector}=nothing
+)
     if path === nothing
         @lock cm.lock begin
             return join(cm.current_path, cm.separator)
@@ -70,7 +72,9 @@ Split `path` (or current) into segments. Mirrors upstream `split_path`
 `path === nothing`, not the live vector (departure from upstream — the
 upstream aliasing was flagged as a hazard).
 """
-function split_path(cm::ContextManager, path::Union{Nothing,AbstractString,AbstractVector}=nothing)
+function split_path(
+    cm::ContextManager, path::Union{Nothing, AbstractString, AbstractVector}=nothing
+)
     if path === nothing
         @lock cm.lock begin
             return copy(cm.current_path)
@@ -90,13 +94,13 @@ Compute `<root>:<addition>` with edge-case handling. Mirrors upstream
 `append_path` (context_manager.py:150-174).
 """
 function append_path(cm::ContextManager;
-                     root::Union{Nothing,AbstractString,AbstractVector}=nothing,
-                     addition::Union{Nothing,AbstractString,AbstractVector}=nothing)
+    root::Union{Nothing, AbstractString, AbstractVector}=nothing,
+    addition::Union{Nothing, AbstractString, AbstractVector}=nothing)
     if addition === nothing
         return join_path(cm, root)
     end
     root_str = join_path(cm, root)
-    add_str  = join_path(cm, addition)
+    add_str = join_path(cm, addition)
     return isempty(root_str) ? add_str : string(root_str, cm.separator, add_str)
 end
 
@@ -178,7 +182,7 @@ function step!(location::AbstractString; catch_empty::Bool=true)
         exists = haskey(cm.contexts, new_path)
         if !exists && catch_empty
             ngc_warn("Context manager stepped into `", new_path,
-                     "` but no Context is registered there")
+                "` but no Context is registered there")
         end
         return exists
     end
@@ -232,7 +236,7 @@ Insert `ctx` into the global registry under `path`. With `overwrite=false`
 upstream `register_context` (context_manager.py:176-197).
 """
 function register_context!(path::AbstractString, ctx::AbstractContext;
-                           overwrite::Bool=false)
+    overwrite::Bool=false)
     cm = context_manager()
     @lock cm.lock begin
         if haskey(cm.contexts, String(path))
@@ -257,7 +261,7 @@ default (different from `register_context!`) — mirrors upstream's
 asymmetric default at context_manager.py:199-213.
 """
 function register_context_local!(local_path::AbstractString, ctx::AbstractContext;
-                                  overwrite::Bool=true)
+    overwrite::Bool=true)
     cm = context_manager()
     full = append_path(cm; addition=local_path)
     return register_context!(full, ctx; overwrite=overwrite)
@@ -296,9 +300,9 @@ function clear_contexts!()
 end
 
 export ContextManager, context_manager,
-       current_path, current_context, current_location,
-       get_context, context_exists,
-       step!, step_back!, step_to!,
-       register_context!, register_context_local!, remove_context!,
-       clear_contexts!,
-       join_path, split_path, append_path
+    current_path, current_context, current_location,
+    get_context, context_exists,
+    step!, step_back!, step_to!,
+    register_context!, register_context_local!, remove_context!,
+    clear_contexts!,
+    join_path, split_path, append_path

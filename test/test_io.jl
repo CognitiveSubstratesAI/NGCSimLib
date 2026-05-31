@@ -1,13 +1,13 @@
 # test_io.jl — coverage for src/support/IO.jl
 
 @testset "make_safe_filename" begin
-    @test NGCSimLib.make_safe_filename("hello world")     == "hello_world"
-    @test NGCSimLib.make_safe_filename("a/b\\c|d?e*f")    == "a_b_c_d_e_f"
+    @test NGCSimLib.make_safe_filename("hello world") == "hello_world"
+    @test NGCSimLib.make_safe_filename("a/b\\c|d?e*f") == "a_b_c_d_e_f"
     # Upstream: regex replaces spaces with `_` FIRST, then `.strip()` is a no-op
     # because the spaces have already become `_`. So trailing spaces become `___`
     # — port matches this 1:1.
-    @test NGCSimLib.make_safe_filename("trail   ")        == "trail___"
-    @test NGCSimLib.make_safe_filename("hi\x00bye")       == "hi_bye"
+    @test NGCSimLib.make_safe_filename("trail   ") == "trail___"
+    @test NGCSimLib.make_safe_filename("hi\x00bye") == "hi_bye"
     # custom replacement char
     @test NGCSimLib.make_safe_filename("a b"; replacement="-") == "a-b"
 end
@@ -33,7 +33,9 @@ end
 end
 
 @testset "check_serializable" begin
-    @test isempty(NGCSimLib.check_serializable(Dict("a" => 1, "b" => "two", "c" => [1, 2, 3])))
+    @test isempty(
+        NGCSimLib.check_serializable(Dict("a" => 1, "b" => "two", "c" => [1, 2, 3]))
+    )
     # JSON3 rejects Task instances (no fallback reflection path). Mirrors
     # Python's json.dumps refusing thread/file handles. Most plain structs
     # JSON3 will reflect-into successfully — we need a value the lib actually

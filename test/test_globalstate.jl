@@ -2,7 +2,7 @@
 
 @testset "make_key composes upstream-compatible string" begin
     @test NGCSimLib.make_key("net.layer1.W", "value") == "net.layer1.W:value"
-    @test NGCSimLib.make_key("a", "b")                 == "a:b"
+    @test NGCSimLib.make_key("a", "b") == "a:b"
 end
 
 @testset "global_state_manager() is a one-per-process singleton" begin
@@ -18,9 +18,9 @@ end
     @test NGCSimLib.from_global_key("net:w") === nothing
 
     NGCSimLib.add_key!("net", "w", [1.0, 2.0, 3.0])
-    @test NGCSimLib.check_key("net:w")              == true
-    @test NGCSimLib.from_global_key("net:w")        == [1.0, 2.0, 3.0]
-    @test NGCSimLib.from_local_key("net", "w")      == [1.0, 2.0, 3.0]
+    @test NGCSimLib.check_key("net:w") == true
+    @test NGCSimLib.from_global_key("net:w") == [1.0, 2.0, 3.0]
+    @test NGCSimLib.from_local_key("net", "w") == [1.0, 2.0, 3.0]
     @test NGCSimLib.from_local_key("absent", "key") === nothing
 end
 

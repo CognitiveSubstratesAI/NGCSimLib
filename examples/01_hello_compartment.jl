@@ -21,7 +21,7 @@ mutable struct ToyNeuron <: NGCSimLib.AbstractComponent
     name::String
     context_path::String
     args::Vector{Any}
-    kwargs::Dict{Symbol,Any}
+    kwargs::Dict{Symbol, Any}
     voltage::NGCSimLib.Compartment
 end
 
@@ -33,8 +33,8 @@ NGCSimLib.Context("net") do _ctx
     cell = ToyNeuron(
         "layer1",                              # name
         "",                                    # context_path (filled by post_init!)
-        Any[], Dict{Symbol,Any}(),             # args/kwargs (protocol)
-        NGCSimLib.Compartment([0.0, 0.0, 0.0]),
+        Any[], Dict{Symbol, Any}(),             # args/kwargs (protocol)
+        NGCSimLib.Compartment([0.0, 0.0, 0.0])
     )
     NGCSimLib.post_init!(cell)
 
@@ -52,7 +52,9 @@ end
 # After the do-block exits, the Context is no longer the "current" scope,
 # but it remains registered in the global ContextManager.
 ctx_obj = NGCSimLib.get_context("net")
-@info "context still registered" path = ctx_obj.path components = length(NGCSimLib.get_components(ctx_obj))
+@info "context still registered" path = ctx_obj.path components = length(
+    NGCSimLib.get_components(ctx_obj)
+)
 
 # The global-state singleton retains the values written:
 @info "global state retains the key" v = NGCSimLib.from_global_key("net:layer1:voltage")

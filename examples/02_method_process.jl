@@ -18,7 +18,7 @@ mutable struct LeakyNeuron <: NGCSimLib.AbstractComponent
     name::String
     context_path::String
     args::Vector{Any}
-    kwargs::Dict{Symbol,Any}
+    kwargs::Dict{Symbol, Any}
     voltage::NGCSimLib.Compartment
 end
 
@@ -42,13 +42,13 @@ end
 # Build under a Context
 NGCSimLib.Context("net") do _ctx
     cell = LeakyNeuron(
-        "layer1", "", Any[], Dict{Symbol,Any}(),
-        NGCSimLib.Compartment([10.0, 10.0, 10.0]),
+        "layer1", "", Any[], Dict{Symbol, Any}(),
+        NGCSimLib.Compartment([10.0, 10.0, 10.0])
     )
     NGCSimLib.post_init!(cell)
 
     # Chain steps: reset → advance → advance. `>>` accepts (component, :symbol) tuples.
-    process = NGCSimLib.MethodProcess(name="step")
+    process = NGCSimLib.MethodProcess(; name="step")
     process >> (cell, :reset!)
     process >> (cell, :advance!)
     process >> (cell, :advance!)

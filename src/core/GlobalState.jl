@@ -28,15 +28,15 @@ Fields (private; access via the public API below):
   - `lock::ReentrantLock`               — NEW vs upstream; Python relies on GIL
 """
 mutable struct GlobalStateManager
-    state::Dict{String,Any}
-    compartments::Dict{String,AbstractCompartmentLike}
+    state::Dict{String, Any}
+    compartments::Dict{String, AbstractCompartmentLike}
     lock::ReentrantLock
 end
 
 GlobalStateManager() = GlobalStateManager(
-    Dict{String,Any}(),
-    Dict{String,AbstractCompartmentLike}(),
-    ReentrantLock(),
+    Dict{String, Any}(),
+    Dict{String, AbstractCompartmentLike}(),
+    ReentrantLock()
 )
 
 # ── Singleton via OncePerProcess (1.12 idiom) ─────────────────────────────────
@@ -200,6 +200,6 @@ function reset_global_state!()
 end
 
 export GlobalStateManager, global_state_manager,
-       make_key, add_compartment!, get_compartment,
-       check_key, add_key!, from_global_key, from_local_key,
-       set_state!, get_state, reset_global_state!
+    make_key, add_compartment!, get_compartment,
+    check_key, add_key!, from_global_key, from_local_key,
+    set_state!, get_state, reset_global_state!

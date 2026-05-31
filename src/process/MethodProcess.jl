@@ -29,14 +29,14 @@ mutable struct MethodProcess <: AbstractProcess
     name::String
     context_path::String
     args::Vector{Any}
-    kwargs::Dict{Symbol,Any}
+    kwargs::Dict{Symbol, Any}
     keyword_order::Vector{Symbol}
     watch_list::Vector{Compartment}
-    method_order::Vector{Tuple{AbstractComponent,Symbol}}
+    method_order::Vector{Tuple{AbstractComponent, Symbol}}
     # `compiled` holds a `CompiledRunner` (callable wrapper around either a
     # Julia closure for the eager path or a `Reactant.Compiler.Thunk` from
     # `compile_with_reactant!`). See BaseProcess.jl for the wrapper rationale.
-    compiled::Union{Nothing,CompiledRunner}
+    compiled::Union{Nothing, CompiledRunner}
 end
 
 """
@@ -51,11 +51,11 @@ function MethodProcess(; name::AbstractString)
         String(name),
         "",                                       # context_path filled by post_init!
         Any[],
-        Dict{Symbol,Any}(),
+        Dict{Symbol, Any}(),
         Symbol[],
         Compartment[],
-        Tuple{AbstractComponent,Symbol}[],
-        nothing,
+        Tuple{AbstractComponent, Symbol}[],
+        nothing
     )
 end
 
@@ -71,21 +71,23 @@ defined with `@compilable` on the receiver type. Mirrors upstream
 function then!(p::MethodProcess, c::AbstractComponent, method_name::Symbol)
     is_compilable_method(typeof(c), method_name) ||
         ngc_error("then!: method `", method_name, "` is not @compilable on ",
-                  typeof(c))
+            typeof(c))
     push!(p.method_order, (c, method_name))
     return p
 end
 
 # Tuple-form for symmetry with the `>>` operator
-then!(p::MethodProcess, step::Tuple{AbstractComponent,Symbol}) =
+then!(p::MethodProcess, step::Tuple{AbstractComponent, Symbol}) =
     then!(p, step[1], step[2])
 
 # `>>` operator (mirrors upstream `MethodProcess.__rshift__` — methodProcess.py:49-50)
-Base.:(>>)(p::MethodProcess, step::Tuple{AbstractComponent,Symbol}) =
+Base.:(>>)(p::MethodProcess, step::Tuple{AbstractComponent, Symbol}) =
     then!(p, step)
 
 # Vectorised: `p >> [(c1, :m1), (c2, :m2)]`
-function Base.:(>>)(p::MethodProcess, steps::AbstractVector{<:Tuple{AbstractComponent,Symbol}})
+function Base.:(>>)(
+    p::MethodProcess, steps::AbstractVector{<:Tuple{AbstractComponent, Symbol}}
+)
     for s in steps
         then!(p, s)
     end
@@ -107,8 +109,8 @@ _parse!(p::MethodProcess) = p.method_order
 
 function Base.show(io::IO, p::MethodProcess)
     print(io, "MethodProcess(name=\"", p.name,
-          "\", steps=", length(p.method_order),
-          ", compiled=", is_compiled(p), ")")
+        "\", steps=", length(p.method_order),
+        ", compiled=", is_compiled(p), ")")
 end
 
 export MethodProcess, then!

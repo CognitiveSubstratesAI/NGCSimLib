@@ -40,8 +40,13 @@ function _resolve_field_chain(instance, head::Expr)
     while cur isa Expr && cur.head === :.
         length(cur.args) == 2 || return nothing
         field = cur.args[2]
-        f = field isa QuoteNode ? field.value :
-            field isa Symbol    ? field       : nothing
+        f = if field isa QuoteNode
+            field.value
+        elseif field isa Symbol
+            field
+        else
+            nothing
+        end
         f === nothing && return nothing
         push!(path, f)
         cur = cur.args[1]
@@ -96,11 +101,13 @@ end
 # Helper: detect both bare `name` and qualified `NGCSimLib.name` callees.
 _callee_is(callee, sym::Symbol) =
     callee === sym ||
-    (callee isa Expr && callee.head === :. &&
-     callee.args[1] === :NGCSimLib &&
-     length(callee.args) >= 2 &&
-     callee.args[2] isa QuoteNode &&
-     callee.args[2].value === sym)
+    (
+        callee isa Expr && callee.head === :. &&
+        callee.args[1] === :NGCSimLib &&
+        length(callee.args) >= 2 &&
+        callee.args[2] isa QuoteNode &&
+        callee.args[2].value === sym
+    )
 
 function visit_expr(t::ContextTransformer, e::Expr)
     # 1. Compartment field access:  c.field  or  c.sub.field
@@ -117,7 +124,7 @@ function visit_expr(t::ContextTransformer, e::Expr)
     # 2. set!(c.field, value) → ctx[key] = visit(value)
     if e.head === :call && length(e.args) >= 3 && _callee_is(e.args[1], :set!)
         target = e.args[2]
-        value  = e.args[3]
+        value = e.args[3]
         if target isa Expr && target.head === :.
             comp = _resolve_field_chain(t.instance, target)
             if comp !== nothing && comp.root_target !== nothing

@@ -53,7 +53,7 @@ for every field whose value is `<: AbstractCompartmentLike`. Mirrors upstream
 `vars(self)` — Julia's `fieldnames` walk is safer (declared fields only).
 """
 function compartments(c::AbstractComponent)
-    pairs = Tuple{Symbol,AbstractCompartmentLike}[]
+    pairs = Tuple{Symbol, AbstractCompartmentLike}[]
     for f in fieldnames(typeof(c))
         v = getfield(c, f)
         if v isa AbstractCompartmentLike
@@ -112,13 +112,13 @@ macro ngc_component(structdef)
         :(name::String),
         :(context_path::String),
         :(args::Vector{Any}),
-        :(kwargs::Dict{Symbol,Any}),
+        :(kwargs::Dict{Symbol, Any})
     ]
 
     new_body = Expr(:block, standard_fields..., user_fields...)
     new_struct = Expr(:struct, true,
-                      :($typename <: $(GlobalRef(NGCSimLib, :AbstractComponent))),
-                      new_body)
+        :($typename <: $(GlobalRef(NGCSimLib, :AbstractComponent))),
+        new_body)
 
     # Build a keyword constructor: `Foo(; name="", context_path="", args=Any[], kwargs=Dict(), user_field=...)`
     user_field_syms = Symbol[]
@@ -132,15 +132,23 @@ macro ngc_component(structdef)
         Expr(:kw, :name, ""),
         Expr(:kw, :context_path, ""),
         Expr(:kw, :args, :(Any[])),
-        Expr(:kw, :kwargs, :(Dict{Symbol,Any}())),
-        (Expr(:kw, s, :nothing) for s in user_field_syms)...,
+        Expr(:kw, :kwargs, :(Dict{Symbol, Any}())),
+        (Expr(:kw, s, :nothing) for s in user_field_syms)...
     )
     ctor = Expr(:function,
         Expr(:call, typename, kw_args),
         Expr(:block,
-            [:($s === nothing && error($(string("@ngc_component constructor: keyword `", s, "` is required")))) for s in user_field_syms]...,
-            Expr(:call, typename, :name, :context_path, :args, :kwargs, user_field_syms...),
-        ),
+            [
+                :(
+                    $s === nothing && error(
+                        $(string(
+                            "@ngc_component constructor: keyword `", s, "` is required"
+                        ))
+                    )
+                ) for s in user_field_syms
+            ]...,
+            Expr(:call, typename, :name, :context_path, :args, :kwargs, user_field_syms...)
+        )
     )
 
     return esc(Expr(:block, new_struct, ctor))
@@ -153,7 +161,9 @@ end
 # Parser at compile time. `args` is the full positional/keyword arg list of
 # the original method (including the receiver as args[1]); `body` is the
 # method body Expr.
-const _COMPILABLE_METHODS = Dict{Tuple{Type,Symbol},NamedTuple{(:args, :body),Tuple{Vector{Any},Expr}}}()
+const _COMPILABLE_METHODS = Dict{
+    Tuple{Type, Symbol}, NamedTuple{(:args, :body), Tuple{Vector{Any}, Expr}}
+}()
 
 """
     _register_compilable!(receiver_type::Type, name::Symbol,
@@ -163,9 +173,8 @@ Internal: stash a method's args + body Expr under `(receiver_type, name)`.
 Called by macro expansion of [`@compilable`](@ref).
 """
 function _register_compilable!(receiver_type::Type, name::Symbol,
-                                args::AbstractVector, body::Expr)
-    _COMPILABLE_METHODS[(receiver_type, name)] =
-        (args = collect(Any, args), body = body)
+    args::AbstractVector, body::Expr)
+    _COMPILABLE_METHODS[(receiver_type, name)] = (args=collect(Any, args), body=body)
     return nothing
 end
 
@@ -190,8 +199,10 @@ macro compilable(fdef)
         error("@compilable expects a function definition; got $(typeof(fdef))")
 
     # Support both `function f(...) ... end` and `f(...) = ...`
-    if !(fdef.head === :function || (fdef.head === :(=) && fdef.args[1] isa Expr &&
-         fdef.args[1].head === :call))
+    if !(
+        fdef.head === :function || (fdef.head === :(=) && fdef.args[1] isa Expr &&
+         fdef.args[1].head === :call)
+    )
         error("@compilable expects a function or assignment-form function definition")
     end
 
@@ -199,19 +210,32 @@ macro compilable(fdef)
     body = fdef.args[2]
     body isa Expr || (body = Expr(:block, body))
 
-    fname = sig.args[1] isa Symbol ? sig.args[1] :
-            sig.args[1] isa Expr && sig.args[1].head === :(.) ? sig.args[1].args[end].value :
-            sig.args[1]
+    fname = if sig.args[1] isa Symbol
+        sig.args[1]
+    elseif sig.args[1] isa Expr && sig.args[1].head === :(.)
+        sig.args[1].args[end].value
+    else
+        sig.args[1]
+    end
     fname isa Symbol ||
         error("@compilable: cannot extract a Symbol function name from $(sig.args[1])")
 
     # First positional arg, ignoring `;` parameters block at args[2] if present
-    first_arg_idx = (length(sig.args) >= 2 && sig.args[2] isa Expr && sig.args[2].head === :parameters) ? 3 : 2
+    first_arg_idx =
+        if (
+            length(sig.args) >= 2 && sig.args[2] isa Expr &&
+            sig.args[2].head === :parameters
+        )
+            3
+        else
+            2
+        end
     if length(sig.args) < first_arg_idx
         receiver_type_expr = :Any
     else
         first_arg = sig.args[first_arg_idx]
-        receiver_type_expr = (first_arg isa Expr && first_arg.head === :(::)) ?
+        receiver_type_expr =
+            (first_arg isa Expr && first_arg.head === :(::)) ?
             first_arg.args[end] :
             :Any
     end
@@ -225,7 +249,7 @@ macro compilable(fdef)
             $(esc(receiver_type_expr)),
             $(QuoteNode(fname)),
             $(QuoteNode(args_list)),
-            $(QuoteNode(body)),
+            $(QuoteNode(body))
         )
         nothing
     end
@@ -318,6 +342,6 @@ function Base.show(io::IO, c::AbstractComponent)
 end
 
 export name, context_path, compartments,
-       @ngc_component, @compilable,
-       is_compilable_method, get_compilable_body, get_compilable_signature,
-       compilable_methods
+    @ngc_component, @compilable,
+    is_compilable_method, get_compilable_body, get_compilable_signature,
+    compilable_methods

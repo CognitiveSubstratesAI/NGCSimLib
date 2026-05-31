@@ -16,7 +16,7 @@ using JSON3
 # ── Singleton state ───────────────────────────────────────────────────────────
 
 # `nothing` until init_config() is called. Mirrors upstream loadedConfig=None.
-const _LOADED_CONFIG = Ref{Union{Nothing,Dict{String,Any}}}(nothing)
+const _LOADED_CONFIG = Ref{Union{Nothing, Dict{String, Any}}}(nothing)
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
@@ -28,7 +28,7 @@ Mirrors upstream `init_config` (configManager.py:14-16). Throws on missing
 file or JSON parse error — upstream does too (no try/except wrap).
 """
 function init_config(path::AbstractString)
-    _LOADED_CONFIG[] = Dict{String,Any}(JSON3.read(read(path, String), Dict{String,Any}))
+    _LOADED_CONFIG[] = Dict{String, Any}(JSON3.read(read(path, String), Dict{String, Any}))
     return nothing
 end
 
@@ -56,7 +56,7 @@ function provide_namespace(name::AbstractString)
     cfg = get_config(name)
     cfg === nothing && return nothing
     # JSON3 may return Dict{String,Any} or an ordered subtype; normalize.
-    d = Dict{Symbol,Any}(Symbol(k) => v for (k, v) in cfg)
+    d = Dict{Symbol, Any}(Symbol(k) => v for (k, v) in cfg)
     return NamedTuple{Tuple(keys(d))}(values(d))
 end
 

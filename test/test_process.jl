@@ -5,13 +5,13 @@ mutable struct _ProcNeuron <: NGCSimLib.AbstractComponent
     name::String
     context_path::String
     args::Vector{Any}
-    kwargs::Dict{Symbol,Any}
+    kwargs::Dict{Symbol, Any}
     voltage::NGCSimLib.Compartment{Vector{Float64}}
 end
 
 _make_proc_neuron(name::String) = _ProcNeuron(
-    name, "", Any[], Dict{Symbol,Any}(),
-    NGCSimLib.Compartment(zeros(3)),
+    name, "", Any[], Dict{Symbol, Any}(),
+    NGCSimLib.Compartment(zeros(3))
 )
 
 NGCSimLib.@compilable function _proc_advance!(c::_ProcNeuron, dt::Float64)
@@ -38,7 +38,8 @@ end
 @testset "then! + >> chaining appends to method_order" begin
     NGCSimLib.clear_contexts!()
     NGCSimLib.reset_global_state!()
-    c = _make_proc_neuron("layer"); NGCSimLib.post_init!(c)
+    c = _make_proc_neuron("layer");
+    NGCSimLib.post_init!(c)
     p = NGCSimLib.MethodProcess(name="step")
     NGCSimLib.then!(p, c, :_proc_advance!)
     @test length(p.method_order) == 1
@@ -51,7 +52,8 @@ end
 
 @testset "then! rejects non-@compilable methods" begin
     NGCSimLib.clear_contexts!()
-    c = _make_proc_neuron("layer"); NGCSimLib.post_init!(c)
+    c = _make_proc_neuron("layer");
+    NGCSimLib.post_init!(c)
     p = NGCSimLib.MethodProcess(name="step")
     @test_throws ErrorException NGCSimLib.then!(p, c, :no_such_method)
 end
@@ -63,7 +65,8 @@ end
     NGCSimLib.reset_global_state!()
     NGCSimLib.clear_compiled!()
 
-    c = _make_proc_neuron("layer"); NGCSimLib.post_init!(c)
+    c = _make_proc_neuron("layer");
+    NGCSimLib.post_init!(c)
     NGCSimLib.set!(c.voltage, [1.0, 2.0, 3.0])
 
     p = NGCSimLib.MethodProcess(name="step")
@@ -77,7 +80,7 @@ end
     # Run with explicit state + no kwargs (the rewritten function takes
     # positional `dt` after `ctx`; loop_args is empty here because no
     # `kwargs[KEY]` references were found).
-    ctx = Dict{String,Any}("layer:voltage" => [1.0, 2.0, 3.0])
+    ctx = Dict{String, Any}("layer:voltage" => [1.0, 2.0, 3.0])
     # But our `_proc_advance!` needs `dt` as a positional, so it can't run
     # via the standard `run` (which is kwargs-only). Use the underlying
     # compiled lambda directly with the right kwargs.
@@ -91,7 +94,8 @@ end
     NGCSimLib.reset_global_state!()
     NGCSimLib.clear_compiled!()
 
-    c = _make_proc_neuron("layer"); NGCSimLib.post_init!(c)
+    c = _make_proc_neuron("layer");
+    NGCSimLib.post_init!(c)
     NGCSimLib.set!(c.voltage, [5.0, 5.0, 5.0])
 
     p = NGCSimLib.MethodProcess(name="step")
@@ -127,7 +131,8 @@ end
     NGCSimLib.clear_contexts!()
     NGCSimLib.reset_global_state!()
     NGCSimLib.clear_compiled!()
-    c = _make_proc_neuron("layer"); NGCSimLib.post_init!(c)
+    c = _make_proc_neuron("layer");
+    NGCSimLib.post_init!(c)
     p = NGCSimLib.MethodProcess(name="step")
     p >> (c, :_proc_advance!)
     @test NGCSimLib.view_compiled(p) == "Not Compiled"
@@ -165,8 +170,10 @@ end
     NGCSimLib.reset_global_state!()
     NGCSimLib.clear_compiled!()
 
-    a = _make_proc_neuron("a"); NGCSimLib.post_init!(a)
-    b = _make_proc_neuron("b"); NGCSimLib.post_init!(b)
+    a = _make_proc_neuron("a");
+    NGCSimLib.post_init!(a)
+    b = _make_proc_neuron("b");
+    NGCSimLib.post_init!(b)
 
     p1 = NGCSimLib.MethodProcess(name="p1")
     p1 >> (a, :_proc_reset!)
@@ -199,8 +206,10 @@ end
     NGCSimLib.clear_compiled!()
 
     NGCSimLib.Context("net") do ctx
-        c = _make_proc_neuron("layer"); NGCSimLib.post_init!(c)
-        p = NGCSimLib.MethodProcess(name="step"); NGCSimLib.post_init!(p)
+        c = _make_proc_neuron("layer");
+        NGCSimLib.post_init!(c)
+        p = NGCSimLib.MethodProcess(name="step");
+        NGCSimLib.post_init!(p)
         @test p.context_path == "net"
         procs = NGCSimLib.get_processes(ctx)
         @test haskey(procs, "step")

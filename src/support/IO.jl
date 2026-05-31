@@ -47,14 +47,14 @@ Returns the new path. Mirrors upstream `make_unique_path` (io.py:7-34).
 upstream behaviour — see Open Question #10 in the support spec.
 """
 function make_unique_path(directory::AbstractString,
-                          root_name::Union{Nothing,AbstractString}=nothing)
+    root_name::Union{Nothing, AbstractString}=nothing)
     if root_name === nothing
         root_name = string(uuid4())
         println("generated path will be named \"", root_name, "\"")
     elseif isdir(joinpath(directory, root_name))
         root_name = string(root_name, "_", uuid4())
         println("root path already exists, generated path will be named \"",
-                root_name, "\"")
+            root_name, "\"")
     end
     path = joinpath(directory, root_name)
     mkdir(path)

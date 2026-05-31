@@ -19,7 +19,7 @@ using Dates
 # Custom log levels installed at runtime via add_logging_level. Keyed by both
 # Symbol and Int so callers can look up either way (mirrors upstream
 # _mapped_calls indexed by both name and number).
-const _CUSTOM_LEVELS = Dict{Union{Symbol,Int},Logging.LogLevel}()
+const _CUSTOM_LEVELS = Dict{Union{Symbol, Int}, Logging.LogLevel}()
 
 # Replaceable logger slot. Wrapping in a mutable struct lets `init_logging()`
 # swap the logger wholesale while `OncePerProcess` handles the one-shot,
@@ -39,7 +39,7 @@ const _NGC_LOGGER = OncePerProcess{_LoggerSlot}() do
 end
 
 # Default configuration knobs (mirror upstream lines 73-77).
-const _DEFAULT_LOG_LEVEL    = Logging.Error
+const _DEFAULT_LOG_LEVEL = Logging.Error
 const _DEFAULT_HIDE_CONSOLE = false
 
 # ── Private helpers ───────────────────────────────────────────────────────────
@@ -100,9 +100,9 @@ Different from `Base.error` only in that it also emits a log record before
 the throw.
 """
 function ngc_error(args...;
-                   errortype::Type{<:Exception}=ErrorException,
-                   sep::AbstractString=" ",
-                   finish::AbstractString="")
+    errortype::Type{<:Exception}=ErrorException,
+    sep::AbstractString=" ",
+    finish::AbstractString="")
     msg = _concat_args(args...; sep=sep, finish=finish)
     _emit(Logging.Error, msg)
     throw(errortype(msg))
@@ -134,12 +134,12 @@ Register a custom log level. Subsequent calls to `custom_log(msg, name)` or
 
 Throws if `name` collides with an already-registered Symbol.
 """
-function add_logging_level(name::Union{Symbol,AbstractString}, num::Integer)
+function add_logging_level(name::Union{Symbol, AbstractString}, num::Integer)
     sym = name isa Symbol ? name : Symbol(name)
     haskey(_CUSTOM_LEVELS, sym) &&
         ngc_error("custom logging level `", sym, "` already registered")
     lvl = Logging.LogLevel(Int(num))
-    _CUSTOM_LEVELS[sym]      = lvl
+    _CUSTOM_LEVELS[sym] = lvl
     _CUSTOM_LEVELS[Int(num)] = lvl
     nothing
 end
@@ -152,14 +152,18 @@ or unregistered, emits a warning and skips (matches upstream `custom_log`
 lines 176-204).
 """
 function custom_log(msg::AbstractString,
-                    level::Union{Symbol,AbstractString,Integer,Nothing}=nothing)
+    level::Union{Symbol, AbstractString, Integer, Nothing}=nothing)
     if level === nothing
         ngc_warn("custom_log: no level supplied; skipping `", msg, "`")
         return nothing
     end
-    key = level isa AbstractString ? Symbol(uppercase(level)) :
-          level isa Integer        ? Int(level)              :
-          level   # Symbol
+    key = if level isa AbstractString
+        Symbol(uppercase(level))
+    elseif level isa Integer
+        Int(level)
+    else
+        level   # Symbol
+    end   # Symbol
     if !haskey(_CUSTOM_LEVELS, key)
         ngc_warn("custom_log: level `", key, "` is not registered; skipping `", msg, "`")
         return nothing
@@ -186,10 +190,10 @@ console output), then constructs a logger that:
 `Error` — and any name previously installed via `add_logging_level`).
 """
 function init_logging(;
-                      logging_file::Union{Nothing,AbstractString}=nothing,
-                      logging_level=_DEFAULT_LOG_LEVEL,
-                      hide_console::Bool=_DEFAULT_HIDE_CONSOLE,
-                      custom_levels::AbstractDict=Dict{Symbol,Int}())
+    logging_file::Union{Nothing, AbstractString}=nothing,
+    logging_level=_DEFAULT_LOG_LEVEL,
+    hide_console::Bool=_DEFAULT_HIDE_CONSOLE,
+    custom_levels::AbstractDict=Dict{Symbol, Int}())
     # Phase 1: install custom levels.
     for (name, num) in custom_levels
         sym = name isa Symbol ? name : Symbol(name)
@@ -227,12 +231,12 @@ end
 # Internal helper: resolve various level inputs to a Logging.LogLevel.
 function _resolve_level(x)
     x isa Logging.LogLevel && return x
-    x isa Integer          && return Logging.LogLevel(Int(x))
+    x isa Integer && return Logging.LogLevel(Int(x))
     if x isa AbstractString || x isa Symbol
         sym = x isa Symbol ? x : Symbol(uppercase(String(x)))
         sym === :DEBUG && return Logging.Debug
-        sym === :INFO  && return Logging.Info
-        sym === :WARN  && return Logging.Warn
+        sym === :INFO && return Logging.Info
+        sym === :WARN && return Logging.Warn
         sym === :ERROR && return Logging.Error
         haskey(_CUSTOM_LEVELS, sym) && return _CUSTOM_LEVELS[sym]
         ngc_error("unknown logging level `", sym, "`")
@@ -258,18 +262,18 @@ Logging.shouldlog(t::_TeeLogger, level, _module, group, id) =
     Logging.shouldlog(t.b, level, _module, group, id)
 Logging.catch_exceptions(::_TeeLogger) = false
 function Logging.handle_message(t::_TeeLogger, level, message, _module,
-                                 group, id, file, line; kwargs...)
+    group, id, file, line; kwargs...)
     # Forward to BOTH inner loggers unconditionally — they each made their own
     # shouldlog decision before getting here (when dispatched via @logmsg →
     # current_logger() → our TeeLogger), but our top-level shouldlog returned
     # true if EITHER inner one wanted it. Re-checking here filters per-sink.
     if Logging.shouldlog(t.a, level, _module, group, id)
         Logging.handle_message(t.a, level, message, _module, group, id,
-                               file, line; kwargs...)
+            file, line; kwargs...)
     end
     if Logging.shouldlog(t.b, level, _module, group, id)
         Logging.handle_message(t.b, level, message, _module, group, id,
-                               file, line; kwargs...)
+            file, line; kwargs...)
     end
     nothing
 end
@@ -277,4 +281,4 @@ end
 # ── Exports (re-exported by NGCSimLib top-level) ──────────────────────────────
 
 export ngc_warn, ngc_info, ngc_debug, ngc_error, ngc_critical,
-       add_logging_level, custom_log, init_logging
+    add_logging_level, custom_log, init_logging

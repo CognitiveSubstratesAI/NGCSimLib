@@ -78,7 +78,7 @@ end
 
 Base.show(io::IO, cm::CompiledMethod) =
     print(io, "CompiledMethod(needed_keys=", length(cm.needed_keys),
-          ", aux=", length(cm.auxiliary), ")")
+        ", aux=", length(cm.auxiliary), ")")
 
 # ── parse_method ──────────────────────────────────────────────────────────────
 
@@ -95,11 +95,11 @@ Mirrors upstream `parse_method` (utils.py:88-113) but skips the recursion
 into sub-methods / sub-Components for Phase A scope.
 """
 function parse_method(instance::AbstractComponent, method_name::Symbol;
-                      ctx_sym::Symbol=:ctx,
-                      kwargs_sym::Symbol=:kwargs)
+    ctx_sym::Symbol=:ctx,
+    kwargs_sym::Symbol=:kwargs)
     entry = get_compilable_entry(typeof(instance), method_name)
     original_args = entry.args        # Vector{Any}: [receiver, arg2, arg3, ...]
-    body          = entry.body
+    body = entry.body
 
     # Phase 1: rewrite compartment access in the body.
     ct = ContextTransformer(instance; ctx_sym=ctx_sym, sub_method=false)
@@ -112,7 +112,7 @@ function parse_method(instance::AbstractComponent, method_name::Symbol;
         body_rewritten = Expr(:block, body_rewritten)
     end
     if isempty(body_rewritten.args) ||
-       !(_is_return_of(last(body_rewritten.args), ctx_sym))
+        !(_is_return_of(last(body_rewritten.args), ctx_sym))
         push!(body_rewritten.args, :(return $ctx_sym))
     end
 
@@ -143,13 +143,13 @@ function parse_method(instance::AbstractComponent, method_name::Symbol;
     # Build new parameters block: promoted positionals first (required, in
     # original order), then existing kwargs (with their defaults).
     new_params_block = Expr(:parameters,
-                            positionals_after_recv...,
-                            existing_kwargs_args...)
+        positionals_after_recv...,
+        existing_kwargs_args...)
 
     fn_name = Symbol("_pure_", nameof(typeof(instance)), "_", method_name)
     fn_expr = Expr(:function,
         Expr(:call, fn_name, new_params_block, ctx_sym),
-        body_rewritten2,
+        body_rewritten2
     )
 
     # Eval the function in Main so it's reachable; capture the Function value.
@@ -174,7 +174,7 @@ function parse_method(instance::AbstractComponent, method_name::Symbol;
         Expr[],
         copy(ct.needed_keys),
         kwarg_keys,
-        signature_kwargs,
+        signature_kwargs
     )
 end
 
@@ -203,7 +203,7 @@ end
 
 # Per-instance cache of CompiledMethod bundles. Keyed by (objectid, method_sym)
 # so two instances of the same type compile independently.
-const _COMPILED_METHODS = IdDict{Any,Dict{Symbol,CompiledMethod}}()
+const _COMPILED_METHODS = IdDict{Any, Dict{Symbol, CompiledMethod}}()
 
 """
     compile_object!(c::AbstractComponent) -> Dict{Symbol,CompiledMethod}
@@ -217,7 +217,7 @@ sub-Component recursion (no `ContextAwareObjectMeta` branch yet).
 """
 function compile_object!(c::AbstractComponent)
     methods_for_type = compilable_methods(typeof(c))
-    bundle = Dict{Symbol,CompiledMethod}()
+    bundle = Dict{Symbol, CompiledMethod}()
     for m in methods_for_type
         bundle[m] = parse_method(c, m)
     end
@@ -248,4 +248,4 @@ don't shadow.
 clear_compiled!() = (empty!(_COMPILED_METHODS); nothing)
 
 export CompiledMethod, parse_method, compile_object!, get_compiled,
-       clear_compiled!, code
+    clear_compiled!, code

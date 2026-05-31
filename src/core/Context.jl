@@ -31,9 +31,9 @@ Symbol corresponding to each.
     PROCESS
 end
 
-const _OBJECT_TYPE_STRING = Dict{ContextObjectType,Symbol}(
+const _OBJECT_TYPE_STRING = Dict{ContextObjectType, Symbol}(
     COMPONENT => :component,
-    PROCESS   => :process,
+    PROCESS => :process
 )
 
 object_type_key(t::ContextObjectType) = _OBJECT_TYPE_STRING[t]
@@ -42,7 +42,7 @@ object_type_key(t::ContextObjectType) = _OBJECT_TYPE_STRING[t]
 # subtypes of AbstractProcess as PROCESS. Mirrors upstream `cls._type`
 # attribute set by `@component`/`@process` decorators.
 object_type(::AbstractComponent) = COMPONENT
-object_type(::AbstractProcess)   = PROCESS
+object_type(::AbstractProcess) = PROCESS
 object_type(obj) = nothing   # warn-and-skip fallback
 
 # ── The Context type ──────────────────────────────────────────────────────────
@@ -58,9 +58,9 @@ scope returns the same instance.
 mutable struct Context <: AbstractContext
     name::String
     path::String
-    objects::Dict{Symbol,Dict{String,Any}}
-    connections::Dict{String,Any}     # dest_root → source (Compartment | Op)
-    previous_path::Union{String,Nothing}
+    objects::Dict{Symbol, Dict{String, Any}}
+    connections::Dict{String, Any}     # dest_root → source (Compartment | Op)
+    previous_path::Union{String, Nothing}
     initialized::Bool
     lock::ReentrantLock
 end
@@ -70,11 +70,11 @@ end
 _make_context(name::AbstractString, path::AbstractString) = Context(
     String(name),
     String(path),
-    Dict{Symbol,Dict{String,Any}}(),
-    Dict{String,Any}(),
+    Dict{Symbol, Dict{String, Any}}(),
+    Dict{String, Any}(),
     nothing,
     true,
-    ReentrantLock(),
+    ReentrantLock()
 )
 
 """
@@ -162,7 +162,7 @@ function register_obj!(ctx::Context, obj)
     ot = object_type(obj)
     if ot === nothing
         ngc_warn("register_obj!: object of type ", typeof(obj),
-                 " has no recognised ContextObjectType; skipping")
+            " has no recognised ContextObjectType; skipping")
         return false
     end
     bucket_key = object_type_key(ot)
@@ -172,15 +172,15 @@ function register_obj!(ctx::Context, obj)
     obj_name = hasproperty(obj, :name) ? getproperty(obj, :name) : nothing
     obj_name === nothing && (
         ngc_error("register_obj!: object of type ", typeof(obj),
-                  " has no `name` field"))
+        " has no `name` field"))
 
     @lock ctx.lock begin
         bucket = get!(ctx.objects, bucket_key) do
-            Dict{String,Any}()
+            Dict{String, Any}()
         end
         if haskey(bucket, obj_name)
             ngc_warn("Context `", ctx.path, "`: duplicate name `", obj_name,
-                     "` in bucket `", bucket_key, "`; overwriting")
+                "` in bucket `", bucket_key, "`; overwriting")
         end
         bucket[String(obj_name)] = obj
         return true
@@ -195,7 +195,8 @@ Mirrors upstream `add_connection` (context.py:227-228).
 """
 function add_connection!(ctx::Context, source::AbstractValueNode, dest::Compartment)
     @lock ctx.lock begin
-        ctx.connections[dest.root_target === nothing ? "<unbound>" : dest.root_target] = source
+        ctx.connections[dest.root_target === nothing ? "<unbound>" : dest.root_target] =
+            source
     end
     return ctx
 end
@@ -211,7 +212,7 @@ upstream `get_objects_by_type` (context.py:157-173).
 function get_objects_by_type(ctx::Context, ot::ContextObjectType)
     bucket_key = object_type_key(ot)
     @lock ctx.lock begin
-        return get(ctx.objects, bucket_key, Dict{String,Any}())
+        return get(ctx.objects, bucket_key, Dict{String, Any}())
     end
 end
 
@@ -245,7 +246,7 @@ Mirrors upstream `Context.recompile` (context.py:75-103).
 function recompile!(ctx::Context)
     # Walk all objects in priority order. Priority comes from the Priority.jl
     # registry; default is 0.
-    targets = Tuple{Int,Any}[]
+    targets = Tuple{Int, Any}[]
     @lock ctx.lock begin
         for (_, bucket) in ctx.objects
             for (_, obj) in bucket
@@ -259,7 +260,7 @@ function recompile!(ctx::Context)
             end
         end
     end
-    sort!(targets; by = first, rev = true)
+    sort!(targets; by=first, rev=true)
     for (_, obj) in targets
         # Phase B will dispatch via Parser/JIT here. Phase A: no-op,
         # since `compile!` doesn't exist yet.
@@ -281,10 +282,10 @@ function Base.show(io::IO, ctx::Context)
         end
     end
     print(io, ", objects=", nobjs, ", connections=",
-          (@lock ctx.lock length(ctx.connections)), ")")
+        (@lock ctx.lock length(ctx.connections)), ")")
 end
 
 export Context, ContextObjectType, COMPONENT, PROCESS,
-       object_type, object_type_key, register_obj!, add_connection!,
-       get_objects_by_type, get_components, get_processes,
-       recompile!
+    object_type, object_type_key, register_obj!, add_connection!,
+    get_objects_by_type, get_components, get_processes,
+    recompile!

@@ -17,7 +17,7 @@ mutable struct _ReactantNeuron <: NGCSimLib.AbstractComponent
     name::String
     context_path::String
     args::Vector{Any}
-    kwargs::Dict{Symbol,Any}
+    kwargs::Dict{Symbol, Any}
     voltage::NGCSimLib.Compartment
 end
 
@@ -40,8 +40,8 @@ end
     initial_v = Reactant.ConcreteRArray([1.0, 2.0, 3.0])
     ctx_obj = NGCSimLib.Context("net")
     NGCSimLib._enter!(ctx_obj)
-    neuron = _ReactantNeuron("layer", "", Any[], Dict{Symbol,Any}(),
-                             NGCSimLib.Compartment(initial_v))
+    neuron = _ReactantNeuron("layer", "", Any[], Dict{Symbol, Any}(),
+        NGCSimLib.Compartment(initial_v))
     NGCSimLib.post_init!(neuron)
 
     p = NGCSimLib.MethodProcess(name="step")
@@ -56,12 +56,12 @@ end
     eager_fn = p.compiled
 
     # Capture eager output for comparison
-    ctx0    = Dict{String,Any}("net:layer:voltage" => initial_v)
-    dt      = Reactant.ConcreteRArray(0.5)
+    ctx0 = Dict{String, Any}("net:layer:voltage" => initial_v)
+    dt = Reactant.ConcreteRArray(0.5)
     out_eager, _ = eager_fn(ctx0, Any[dt])
 
     # Now JIT compile
-    ctx_sample  = Dict{String,Any}("net:layer:voltage" => initial_v)
+    ctx_sample = Dict{String, Any}("net:layer:voltage" => initial_v)
     sample_args = Any[dt]
     NGCSimLib.compile_with_reactant!(p, ctx_sample, sample_args)
     @test NGCSimLib.is_compiled(p)
@@ -69,7 +69,7 @@ end
     @test p.compiled !== eager_fn
 
     # Re-run with the JIT version
-    ctx_jit = Dict{String,Any}("net:layer:voltage" => initial_v)
+    ctx_jit = Dict{String, Any}("net:layer:voltage" => initial_v)
     out_jit, _ = p.compiled(ctx_jit, sample_args)
 
     # Numerical equivalence
@@ -85,8 +85,8 @@ end
     initial_v = Reactant.ConcreteRArray([10.0, 20.0, 30.0])
     ctx_obj = NGCSimLib.Context("net")
     NGCSimLib._enter!(ctx_obj)
-    neuron = _ReactantNeuron("layer", "", Any[], Dict{Symbol,Any}(),
-                             NGCSimLib.Compartment(initial_v))
+    neuron = _ReactantNeuron("layer", "", Any[], Dict{Symbol, Any}(),
+        NGCSimLib.Compartment(initial_v))
     NGCSimLib.post_init!(neuron)
 
     p = NGCSimLib.MethodProcess(name="multi")
@@ -99,11 +99,11 @@ end
     NGCSimLib.compile_process!(p)
     dt = Reactant.ConcreteRArray(0.5)
 
-    ctx_sample = Dict{String,Any}("net:layer:voltage" => initial_v)
+    ctx_sample = Dict{String, Any}("net:layer:voltage" => initial_v)
     NGCSimLib.compile_with_reactant!(p, ctx_sample, Any[dt])
 
     # Two advances of 0.5: voltage = initial + 0.5 + 0.5 = initial + 1.0
-    out, _ = p.compiled(Dict{String,Any}("net:layer:voltage" => initial_v), Any[dt])
+    out, _ = p.compiled(Dict{String, Any}("net:layer:voltage" => initial_v), Any[dt])
     @test Array(out["net:layer:voltage"]) == [11.0, 21.0, 31.0]
 end
 
@@ -115,8 +115,8 @@ end
     initial_v = Reactant.ConcreteRArray([1.0, 2.0, 3.0])
     ctx_obj = NGCSimLib.Context("net")
     NGCSimLib._enter!(ctx_obj)
-    neuron = _ReactantNeuron("layer", "", Any[], Dict{Symbol,Any}(),
-                             NGCSimLib.Compartment(initial_v))
+    neuron = _ReactantNeuron("layer", "", Any[], Dict{Symbol, Any}(),
+        NGCSimLib.Compartment(initial_v))
     NGCSimLib.post_init!(neuron)
 
     p = NGCSimLib.MethodProcess(name="lazy")
@@ -127,7 +127,7 @@ end
     @test NGCSimLib.is_compiled(p) == false
     # No prior compile_process!; compile_with_reactant! must trigger it.
     NGCSimLib.compile_with_reactant!(p,
-        Dict{String,Any}("net:layer:voltage" => initial_v),
+        Dict{String, Any}("net:layer:voltage" => initial_v),
         Any[])
     @test NGCSimLib.is_compiled(p)
 end
