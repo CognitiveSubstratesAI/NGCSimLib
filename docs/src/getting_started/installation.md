@@ -1,6 +1,7 @@
 # Installation
 
-NGCSimLib requires Julia 1.10 or later.
+NGCSimLib requires **Julia 1.12 or later** — uses `OncePerProcess` for
+module-level singletons (see [`docs/decisions.md`](https://github.com/CognitiveSubstratesAI/NGCSimLib/blob/main/docs/decisions.md) §1).
 
 ## From GitHub (current — pre-registration)
 

@@ -4,4 +4,4 @@ NGCSimLib = "8f3a9b1c-2d7e-4f5a-9c2b-1e6f8a3d4b9c"
 
 [compat]
 Documenter = "1"
-julia = "1.10"
+julia = "1.12"

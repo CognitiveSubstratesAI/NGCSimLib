@@ -15,13 +15,14 @@ makedocs(
         assets     = String[],
     ),
     pages = [
-        "Home"            => "index.md",
-        "Getting Started" => "getting_started/installation.md",
-        "Architecture"    => "getting_started/architecture.md",
-        "Tutorials"       => Any[
-            # Add tutorial pages as they're written
+        "Home" => "index.md",
+        "Getting Started" => [
+            "Installation" => "getting_started/installation.md",
+            "Quickstart"   => "getting_started/quickstart.md",
+            "JIT with Reactant" => "getting_started/jit.md",
+            "Architecture" => "getting_started/architecture.md",
         ],
-        "API"             => "api/index.md",
+        "API" => "api/index.md",
     ],
     warnonly = [:missing_docs, :cross_references],
 )

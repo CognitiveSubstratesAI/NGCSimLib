@@ -22,26 +22,37 @@ AbstractProcess         # scheduled callable from @compilable methods
 ## Compilation pipeline
 
 ```
-User code (@compilable function ... end)
-  │ macro captures Expr at definition site
+User code (@compilable function advance!(c, dt) ... end)
+  │ macro captures (args, body) Expr at definition site
   ▼
-Per-type @compilable registry
-  │ Component constructed in `with_context(ctx) do ... end`
+Per-type @compilable registry, keyed (Type, :symbol)
+  │ Component constructed inside `Context("net") do ctx ... end`
+  │ post_init!(c) wires Compartment fields + registers in Context
   ▼
-compile_object!(component) — walks Expr through ContextTransformer:
-  self.x         → ctx[Symbol("path:to:x")]
-  self.x = v     → merge ctx with new value
-  sub.method(..) → graft compiled AST
+parse_method(c, :advance!) walks the body Expr through ContextTransformer:
+  c.voltage                  → ctx["net:layer1:voltage"]
+  set!(c.voltage, v)         → ctx["net:layer1:voltage"] = v
+  get_value(c.voltage)       → ctx["net:layer1:voltage"]
+  return c                   → return ctx
+  + KwargsTransformer rewrites `kwargs[:lr]` → `lr` (bare local)
+  + every positional arg after the receiver is promoted to required kwarg
   ▼
-eval → pure function (ctx::NamedTuple, kwargs...) → ctx
+Core.eval(Main, ...) — pure function _pure_<Type>_<method>(ctx; kwargs...)
+                                                                  → ctx
   ▼
-Process wraps one or more compiled methods
+Process.compile_process! glues N rewritten functions into a sequential
+runner closure, wrapped in CompiledRunner. Eager-JIT works here already.
   ▼
-Reactant.@compile → StableHLO/XLA
+Process.compile_with_reactant!(p, sample_ctx, sample_loop_args) (opt-in):
+  Reactant.@compile traces the eager runner once with sample shapes.
+  Returns a Reactant.Compiler.Thunk wrapped in CompiledRunner — same
+  signature, same numeric output, XLA-backed.
   ▼
-run!(process, kwargs...)
+run(p; kwargs...) — works identically against either CompiledRunner
 ```
 
-The Reactant integration is at the END — after AST rewriting + `eval`. The
-parser produces pure functions; Reactant traces those; Enzyme differentiates
-them.
+The Reactant integration is at the END — after Expr rewriting + Core.eval.
+The Parser produces pure Dict-ctx functions; Reactant traces those;
+Enzyme differentiates them. See [`docs/decisions.md`](https://github.com/CognitiveSubstratesAI/NGCSimLib/blob/main/docs/decisions.md) §9 for the
+empirical validation that the Parser's Dict-ctx form is Reactant-traceable
+without modification.
