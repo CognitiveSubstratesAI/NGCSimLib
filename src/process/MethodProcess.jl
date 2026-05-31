@@ -33,7 +33,10 @@ mutable struct MethodProcess <: AbstractProcess
     keyword_order::Vector{Symbol}
     watch_list::Vector{Compartment}
     method_order::Vector{Tuple{AbstractComponent,Symbol}}
-    compiled::Union{Nothing,Function}
+    # `compiled` holds a `CompiledRunner` (callable wrapper around either a
+    # Julia closure for the eager path or a `Reactant.Compiler.Thunk` from
+    # `compile_with_reactant!`). See BaseProcess.jl for the wrapper rationale.
+    compiled::Union{Nothing,CompiledRunner}
 end
 
 """

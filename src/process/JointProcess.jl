@@ -26,7 +26,7 @@ mutable struct JointProcess <: AbstractProcess
     keyword_order::Vector{Symbol}
     watch_list::Vector{Compartment}
     process_order::Vector{AbstractProcess}
-    compiled::Union{Nothing,Function}
+    compiled::Union{Nothing,CompiledRunner}   # see BaseProcess.CompiledRunner
 end
 
 """

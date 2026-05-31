@@ -2,10 +2,46 @@
 # Spec: docs/specs/03_process_spec.md §"BaseProcess".
 #
 # A Process is an ordered sequence of `(component, method_name)` steps that
-# get compiled (in Phase B, via Reactant) into a pure function
-# `(ctx::Dict, kwargs...) → (ctx, watched_tuple)`. Phase A does sequential
-# eager execution (no JIT); the SHAPE is correct so Phase B can swap the
-# eager driver for a Reactant traced one.
+# get compiled into a pure function `(ctx::Dict, kwargs...) → (ctx, watched_tuple)`.
+#
+# `compile_process!` produces a Julia-eager runner (works without Reactant).
+# `compile_with_reactant!` (opt-in) wraps that runner with `Reactant.@compile`
+# for traced JIT execution — validated end-to-end against the Parser output
+# in 2026-05-31 spike (decisions.md #9).
+
+import Reactant
+
+# ── CompiledRunner: opaque callable wrapper ───────────────────────────────────
+#
+# Holds either a Julia closure (eager) or a `Reactant.Compiler.Thunk` (JIT)
+# behind a single concrete type. This keeps `Any` out of struct signatures —
+# the heterogeneity is encapsulated in `payload`, with one well-known
+# dispatch entry point.
+#
+# Why not `Union{Nothing,Function,Reactant.Compiler.Thunk}`? `Compiler.Thunk`
+# is a Reactant *internal* — naming it in our struct ties us to Reactant's
+# unstable surface. The wrapper is refactor-tolerant.
+#
+# Why not `<: Function`? Reactant.Thunk doesn't subtype Function; Julia has
+# no `AbstractCallable` supertype, only the implicit "supports
+# `(::T)(args...)`" protocol.
+
+"""
+    CompiledRunner
+
+Opaque callable: wraps the result of `compile_process!` (Julia closure) or
+`compile_with_reactant!` (`Reactant.Compiler.Thunk`). Stored on
+`AbstractProcess.compiled` as `Union{Nothing, CompiledRunner}`. Dispatch
+through `(::CompiledRunner)(args...)` forwards to the inner payload.
+"""
+struct CompiledRunner
+    payload::Any
+end
+
+(r::CompiledRunner)(args...; kwargs...) = r.payload(args...; kwargs...)
+
+Base.show(io::IO, r::CompiledRunner) =
+    print(io, "CompiledRunner(", nameof(typeof(r.payload)), ")")
 #
 # AbstractProcess is declared in AbstractTypes.jl. Concrete process types
 # (MethodProcess, JointProcess) subtype it and provide their own `_parse!`
@@ -179,11 +215,14 @@ function compile_process!(p::AbstractProcess)
         get_compiled(c, m)
     end
 
-    # Collect the union of all needed kwarg names across every step.
+    # Collect the union of kwarg names every step needs. The Parser promotes
+    # original positional args (after receiver) to required kwargs in the
+    # rewritten signature, so a single kwargs-only dispatch path covers both
+    # originally-positional and originally-kwarg cases.
     kw_set = Set{Symbol}()
     for (c, m) in steps
         cm = get_compiled(c, m)
-        union!(kw_set, cm.transformed_kwargs)
+        union!(kw_set, cm.signature_kwargs)
     end
     empty!(p.keyword_order)
     append!(p.keyword_order, sort(collect(kw_set)))
@@ -192,28 +231,68 @@ function compile_process!(p::AbstractProcess)
     # over a stable Vector.
     watched = copy(p.watch_list)
 
-    # Sequential runner — pure function over (ctx, loop_args)
-    # `loop_args` is the Vector of kwarg values in `keyword_order` order
-    # (mirrors upstream's `loop_args` positional tuple).
+    # Pre-bake each step's kwarg name list so the runner doesn't rebuild it
+    # from `signature_kwargs` on every call.
+    step_kwargs = [Tuple(get_compiled(c, m).signature_kwargs) for (c, m) in steps]
     keyword_order_local = copy(p.keyword_order)
-    p.compiled = (ctx::AbstractDict, loop_args::AbstractVector) -> begin
-        # Unpack loop_args into named kwargs for each step.
+
+    # Sequential runner — pure function over (ctx, loop_args).
+    # `loop_args` is the Vector of values in `keyword_order` order.
+    eager_runner = (ctx::AbstractDict, loop_args::AbstractVector) -> begin
+        # Build the per-call name → value map once.
         kw_pairs = Pair{Symbol,Any}[]
         for (i, k) in enumerate(keyword_order_local)
             push!(kw_pairs, k => loop_args[i])
         end
-        kw = (; kw_pairs...)
+        kw_full = Dict{Symbol,Any}(kw_pairs)
 
         out_ctx = ctx
-        for (c, m) in steps
+        for (si, (c, m)) in enumerate(steps)
             cm = get_compiled(c, m)
-            out_ctx = cm(out_ctx; kw...)
+            # Pass only the kwargs this step's signature actually accepts.
+            step_kw = (; (k => kw_full[k] for k in step_kwargs[si])...)
+            out_ctx = cm.fn(out_ctx; step_kw...)
         end
         # Watched tuple: final values of every compartment in watch_list
         watched_vals = Tuple(out_ctx[w.root_target] for w in watched)
         return (out_ctx, watched_vals)
     end
+    p.compiled = CompiledRunner(eager_runner)
 
+    return p
+end
+
+# ── compile_with_reactant! (opt-in JIT) ───────────────────────────────────────
+
+"""
+    compile_with_reactant!(p::AbstractProcess,
+                           sample_ctx::AbstractDict,
+                           sample_loop_args::AbstractVector) -> p
+
+Replace `p.compiled` (a Julia-eager closure) with a `Reactant.@compile`'d
+traced version. The sample inputs determine the shapes / types Reactant
+traces against — every subsequent `run()` call must use compatible
+shapes (per Reactant's tracing model).
+
+If `compile_process!` hasn't been called yet, this triggers it first.
+
+Validated by decisions.md #9 — Reactant 0.2.262 traces through
+`Dict{String,Any}` ctx with string-keyed access as constants. No Parser
+rewrite required.
+
+Throws on first-call shape mismatch. To recompile against different
+shapes, call `compile_process!(p)` (reverts to eager) then re-run this.
+"""
+function compile_with_reactant!(p::AbstractProcess,
+                                sample_ctx::AbstractDict,
+                                sample_loop_args::AbstractVector)
+    is_compiled(p) || compile_process!(p)
+    eager_runner = p.compiled   # CompiledRunner wrapping the eager closure
+    # `@compile` is a Reactant macro — it expands at parse time using the
+    # local `eager_runner` / sample inputs to determine tracing arguments.
+    # The result is a Reactant.Compiler.Thunk; rewrap in CompiledRunner.
+    thunk = Reactant.@compile eager_runner(sample_ctx, sample_loop_args)
+    p.compiled = CompiledRunner(thunk)
     return p
 end
 
@@ -256,7 +335,7 @@ function post_init!(p::AbstractProcess)
     return p
 end
 
-export AbstractProcess,
+export AbstractProcess, CompiledRunner,
        watch_list, keyword_order, is_compiled,
        watch!, pack_keywords, pack_rows,
-       run, compile_process!, view_compiled
+       run, compile_process!, compile_with_reactant!, view_compiled

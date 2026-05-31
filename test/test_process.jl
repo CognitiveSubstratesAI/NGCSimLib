@@ -70,9 +70,9 @@ end
     p >> (c, :_proc_advance!)
     NGCSimLib.compile_process!(p)
     @test NGCSimLib.is_compiled(p)
-    # Keyword order auto-detected: _proc_advance! has no `kwargs[...]` lookups
-    # so keyword_order should be empty (positional `dt` doesn't count as a kwarg key)
-    @test isempty(p.keyword_order)
+    # The Parser promotes the original positional `dt` to a required kwarg in
+    # the rewritten signature, so it appears in keyword_order.
+    @test p.keyword_order == [:dt]
 
     # Run with explicit state + no kwargs (the rewritten function takes
     # positional `dt` after `ctx`; loop_args is empty here because no

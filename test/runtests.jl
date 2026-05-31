@@ -79,6 +79,10 @@ using NGCSimLib
         include("test_process.jl")
     end
 
+    @testset "Reactant integration (Process JIT)" begin
+        include("test_reactant_integration.jl")
+    end
+
     # Aqua quality checks: skipped during Phase A scaffold; re-enable once
     # actual code lands (see test/aqua.jl). Requires Pkg.test() activation
     # because Aqua is in [extras] / [targets].

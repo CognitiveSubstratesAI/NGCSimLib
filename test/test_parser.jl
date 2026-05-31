@@ -127,11 +127,13 @@ end
     @test "p:voltage" in cm.needed_keys
 
     # Build a ctx dict pre-loaded with the current state and call the pure fn.
+    # The Parser promotes all original positional args (after the receiver) to
+    # required kwargs, so `dt` comes in via the kwargs-only path.
     ctx = Dict{String,Any}(
         "p:voltage" => [1.0, 2.0, 3.0],
         "p:spikes"  => [0.0, 0.0, 0.0],
     )
-    out = cm(ctx, 0.5)
+    out = cm(ctx; dt=0.5)
     @test out === ctx                       # mutates + returns same dict
     @test ctx["p:voltage"] == [1.5, 2.5, 3.5]
 end

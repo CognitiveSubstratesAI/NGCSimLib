@@ -44,6 +44,13 @@ Bundle holding the parsed/rewritten artefacts for one `@compilable` method:
   - `auxiliary::Vector{Expr}` — inlined sub-method definitions (Phase B; empty in A)
   - `needed_keys::Set{String}` — every compartment key the body reads/writes
   - `transformed_kwargs::Set{Symbol}` — every kwargs key the body referenced
+  - `signature_kwargs::Vector{Symbol}` — names of every kwarg in the rewritten
+                                          signature (originally-positional args
+                                          promoted to required kwargs, plus
+                                          originally-kwarg args). Used by the
+                                          Process runner to build `keyword_order`
+                                          and route `loop_args` values via
+                                          `cm.fn(ctx; …kwargs)`.
 
 `CompiledMethod` is callable: `cm(ctx, args...; kwargs...)` invokes `cm.fn`.
 """
@@ -53,6 +60,7 @@ struct CompiledMethod
     auxiliary::Vector{Expr}
     needed_keys::Set{String}
     transformed_kwargs::Set{Symbol}
+    signature_kwargs::Vector{Symbol}
 end
 
 (cm::CompiledMethod)(args...; kwargs...) = cm.fn(args...; kwargs...)
@@ -111,24 +119,54 @@ function parse_method(instance::AbstractComponent, method_name::Symbol;
     # Phase 2: kwargs subscript rewrite.
     body_rewritten2, kwarg_keys = transform_kwargs(body_rewritten; kwargs_sym=kwargs_sym)
 
-    # Synthesize a function definition. The user's original signature was
-    # `method_name(receiver, args...; kwargs...)` — we replace the receiver
-    # with `ctx` and keep the rest verbatim. Type annotations and defaults
-    # carry over for free since we splat the original `Expr`s.
-    fn_name = Symbol("_pure_", nameof(typeof(instance)), "_", method_name)
-    rewritten_args = Any[ctx_sym]
-    # original_args[1] is the receiver (e.g. `:(c::MyType)`); skip it.
-    # original_args[2:end] may include a `:parameters` block (kwargs); pass through.
-    for a in @view original_args[2:end]
-        push!(rewritten_args, a)
+    # Build the rewritten signature: `_pure_<Type>_<method>(ctx; <kwargs>)`.
+    # All original positional args after the receiver become REQUIRED kwargs;
+    # existing kwargs (from a `:parameters` block) carry through with their
+    # defaults intact. This gives the Process runner a single, uniform path:
+    # `cm.fn(ctx; kw...)` — no positional/kwarg split.
+    #
+    # Walk original_args, separating: receiver / kwargs-block contents /
+    # positional args after the receiver.
+    receiver_arg = nothing
+    existing_kwargs_args = Any[]
+    positionals_after_recv = Any[]
+    for a in original_args
+        if a isa Expr && a.head === :parameters
+            append!(existing_kwargs_args, a.args)
+        elseif receiver_arg === nothing
+            receiver_arg = a
+        else
+            push!(positionals_after_recv, a)
+        end
     end
+
+    # Build new parameters block: promoted positionals first (required, in
+    # original order), then existing kwargs (with their defaults).
+    new_params_block = Expr(:parameters,
+                            positionals_after_recv...,
+                            existing_kwargs_args...)
+
+    fn_name = Symbol("_pure_", nameof(typeof(instance)), "_", method_name)
     fn_expr = Expr(:function,
-        Expr(:call, fn_name, rewritten_args...),
+        Expr(:call, fn_name, new_params_block, ctx_sym),
         body_rewritten2,
     )
 
     # Eval the function in Main so it's reachable; capture the Function value.
     fn_val = Core.eval(Main, fn_expr)
+
+    # signature_kwargs: every name in the rewritten kwargs block (both
+    # promoted positionals + originally-kwarg names). The Process runner
+    # gathers the union of these across steps to build `keyword_order`.
+    signature_kwargs = Symbol[]
+    for a in positionals_after_recv
+        sym = _extract_arg_name(a)
+        sym !== nothing && push!(signature_kwargs, sym)
+    end
+    for a in existing_kwargs_args
+        sym = _extract_arg_name(a)
+        sym !== nothing && push!(signature_kwargs, sym)
+    end
 
     return CompiledMethod(
         fn_val,
@@ -136,7 +174,21 @@ function parse_method(instance::AbstractComponent, method_name::Symbol;
         Expr[],
         copy(ct.needed_keys),
         kwarg_keys,
+        signature_kwargs,
     )
+end
+
+# Helper: extract a Symbol name from any argument-list element shape.
+# Handles: :foo | :(foo::T) | :(foo=default) | :((foo::T)=default).
+function _extract_arg_name(a)
+    if a isa Symbol
+        return a
+    elseif a isa Expr && a.head === :(::) && a.args[1] isa Symbol
+        return a.args[1]
+    elseif a isa Expr && a.head === :kw
+        return _extract_arg_name(a.args[1])
+    end
+    return nothing
 end
 
 # Helper: detect a `return <ctx_sym>` tail.
