@@ -211,6 +211,46 @@ the NGCLearn pilot lands.
 
 ---
 
+## 9. Parser output is Reactant-traceable as-is — no rewrite needed
+
+Date: 2026-05-31 (validated by end-to-end spike)
+
+**Surprising-but-validated finding.** Before writing the Parser, I expected
+Reactant would refuse to trace `Dict{String,Any}` context dicts because
+string-keyed access is a runtime hash lookup, not symbolic. Empirically
+(Reactant 0.2.262), this is wrong: Reactant resolves string keys at
+trace time as constants and specializes on the concrete Dict layout it
+sees in the first trace call.
+
+**Validated by** `tmp/reactant_e2e_spike.jl` (not committed):
+
+  - Parser produces `function _pure_<Type>_<method>(ctx, args...)`
+    over `Dict{String,Any}` ctx
+  - `@compile` succeeds without modification
+  - Compiled call produces bit-identical output to the eager Julia path
+
+**Implication for Process layer:** `compile_process!` can wrap the
+sequential closure in `@compile` directly. No need to introduce
+`NamedTuple` ctx or array-positional signatures (which would have been
+the contingency rewrite).
+
+**One Julia-vs-Reactant interop wart uncovered:** `Reactant.ConcreteRArray{T,N}`
+is an alias for `Reactant.ConcretePJRTArray{T,N,1}`. Declaring a struct
+field as `Compartment{Reactant.ConcreteRArray{Float64,1}}` throws a
+MethodError at construction time because the actual returned type is
+the 3-parameter form. Workaround: use `Compartment` (untyped) or
+`Compartment{<:AbstractArray}` for fields that hold Reactant arrays.
+Document for the @ngc_component macro when we revisit it for tracing.
+
+**Status:** Phase A substrate is genuinely Reactant-ready. Phase B
+(wrapping Process.run in `@compile`) is mechanical — no Parser rewrite,
+no Compartment refactor, no Process.compiled signature change.
+
+References: `/tmp/reactant_spike.jl`, `/tmp/reactant_e2e_spike.jl`
+(both temp; the decision is what matters).
+
+---
+
 ## Decision update policy
 
 - Update this file when a decision affects **more than one file** OR
