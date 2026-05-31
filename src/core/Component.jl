@@ -156,25 +156,54 @@ end
 
 # ── `@compilable` macro for marking methods JIT-amenable ──────────────────────
 
-# Registry: (receiver_type, method_name) -> (args = Vector{Any}, body = Expr).
-# Populated at module-load time by `@compilable` expansions; consumed by the
-# Parser at compile time. `args` is the full positional/keyword arg list of
-# the original method (including the receiver as args[1]); `body` is the
-# method body Expr.
+# TWO registration mechanisms keep `@compilable` precompile-safe:
+#
+#  1. **Dict cache** (`_COMPILABLE_METHODS`). Fast lookup at runtime. Populated
+#     by `_register_compilable!`. SURVIVES precompile only when the @compilable
+#     usage is in the same module as the Dict (NGCSimLib itself). Cross-module
+#     mutations are scoped to the calling module's snapshot and do NOT show up
+#     in NGCSimLib's loaded state — that's a Julia precompile rule, not a
+#     bug we can fix here.
+#
+#  2. **Method-table dispatch** (`_compilable_entry_dispatch(::Type, ::Val)`).
+#     The macro emits an OVERLOAD of this generic per (receiver type, method
+#     name). Method definitions are preserved across precompile (they're a
+#     core part of Julia's type system), so a foreign package (e.g. NGCLearn)
+#     that defines `@compilable advance_state!(c::LIFCell, ...)` survives
+#     precompile via this mechanism even when the Dict mutation is lost.
+#
+# `get_compilable_entry` tries the Dict first (fast), then falls back to the
+# method table (precompile-safe) and lazy-caches the result.
 const _COMPILABLE_METHODS = Dict{
-    Tuple{Type, Symbol}, NamedTuple{(:args, :body), Tuple{Vector{Any}, Expr}}
+    Tuple{Type, Symbol},
+    NamedTuple{(:args, :body, :mod), Tuple{Vector{Any}, Expr, Module}}
 }()
+
+"""
+    _compilable_entry_dispatch(::Type{T}, ::Val{name}) -> NamedTuple{(:args, :body)}
+
+Method-table-based registry of `@compilable` entries. The `@compilable`
+macro overloads this for each `(receiver_type, method_name)` pair. Used as
+a precompile-safe fallback when the `_COMPILABLE_METHODS` Dict cache misses
+(cross-module case).
+
+Throws `MethodError` for unregistered pairs.
+"""
+function _compilable_entry_dispatch end
 
 """
     _register_compilable!(receiver_type::Type, name::Symbol,
                           args::AbstractVector, body::Expr)
 
-Internal: stash a method's args + body Expr under `(receiver_type, name)`.
-Called by macro expansion of [`@compilable`](@ref).
+Internal: stash a method's args + body in the Dict cache. Called by macro
+expansion of [`@compilable`](@ref). The macro ALSO emits an
+`_compilable_entry_dispatch` method definition for precompile safety.
 """
 function _register_compilable!(receiver_type::Type, name::Symbol,
-    args::AbstractVector, body::Expr)
-    _COMPILABLE_METHODS[(receiver_type, name)] = (args=collect(Any, args), body=body)
+    args::AbstractVector, body::Expr, mod::Module=Main)
+    _COMPILABLE_METHODS[(receiver_type, name)] = (
+        args=collect(Any, args), body=body, mod=mod
+    )
     return nothing
 end
 
@@ -243,14 +272,35 @@ macro compilable(fdef)
     # Capture the full arg list (everything after the function name in `sig`).
     args_list = sig.args[2:end]
 
+    # The macro emits THREE things:
+    #   1. The original function definition (eager Julia method dispatch).
+    #   2. A Dict-cache registration (`_register_compilable!`) — fast lookup
+    #      at runtime, works within a single module's precompile.
+    #   3. A method overload of `_compilable_entry_dispatch(::Type{T}, ::Val{name})`
+    #      — precompile-safe across module boundaries (method tables ARE
+    #      preserved by precompile, unlike Dict mutations).
+    # `__module__` is the module the macro was invoked from — captured so the
+    # Parser can eval the rewritten function back into that namespace and
+    # resolve any module-local names referenced in the body (e.g., private
+    # helper functions in NGCLearn).
     return quote
         $(esc(fdef))
         $(GlobalRef(NGCSimLib, :_register_compilable!))(
             $(esc(receiver_type_expr)),
             $(QuoteNode(fname)),
             $(QuoteNode(args_list)),
-            $(QuoteNode(body))
+            $(QuoteNode(body)),
+            $(__module__)
         )
+        function $(GlobalRef(NGCSimLib, :_compilable_entry_dispatch))(
+            ::Type{$(esc(receiver_type_expr))}, ::Val{$(QuoteNode(fname))}
+        )
+            return (
+                args=$(QuoteNode(args_list)),
+                body=$(QuoteNode(body)),
+                mod=$(__module__)
+            )
+        end
         nothing
     end
 end
@@ -259,15 +309,15 @@ end
     is_compilable_method(T::Type, name::Symbol) -> Bool
 
 True iff a method named `name` was defined with `@compilable` for receivers
-of type `T` (or any supertype of `T` that registered the method).
+of type `T` (or any supertype of `T` that registered the method). Checks the
+Dict cache first, then the method-table fallback (precompile-safe).
 """
 function is_compilable_method(T::Type, name::Symbol)
-    haskey(_COMPILABLE_METHODS, (T, name)) && return true
-    # Walk supertypes — methods registered on AbstractComponent should be
-    # findable via any concrete subtype.
-    s = supertype(T)
+    # Walk T plus its supertype chain, checking both registries each step.
+    s = T
     while s !== Any
         haskey(_COMPILABLE_METHODS, (s, name)) && return true
+        hasmethod(_compilable_entry_dispatch, Tuple{Type{s}, Val{name}}) && return true
         s = supertype(s)
     end
     return false
@@ -296,13 +346,24 @@ end
 """
     get_compilable_entry(T::Type, name::Symbol) -> NamedTuple{(:args, :body), …}
 
-Internal: full registry entry for `(T, name)`, walking supertypes.
+Internal: full registry entry for `(T, name)`, walking supertypes. Tries the
+Dict cache first, then the precompile-safe method-table fallback. Lazy-caches
+fallback results into the Dict for fast subsequent lookups.
 """
 function get_compilable_entry(T::Type, name::Symbol)
-    haskey(_COMPILABLE_METHODS, (T, name)) && return _COMPILABLE_METHODS[(T, name)]
-    s = supertype(T)
+    s = T
     while s !== Any
+        # Dict cache (fast path; populated by `_register_compilable!`).
         haskey(_COMPILABLE_METHODS, (s, name)) && return _COMPILABLE_METHODS[(s, name)]
+        # Method-table fallback (precompile-safe). Catch MethodError to walk
+        # the supertype chain rather than propagate.
+        if hasmethod(_compilable_entry_dispatch, Tuple{Type{s}, Val{name}})
+            entry = _compilable_entry_dispatch(s, Val(name))
+            # Cache it under the original `T` key so subsequent lookups skip
+            # the supertype walk + MethodError dance.
+            _COMPILABLE_METHODS[(T, name)] = entry
+            return entry
+        end
         s = supertype(s)
     end
     ngc_error("no @compilable method `", name, "` registered for type ", T)
@@ -312,17 +373,32 @@ end
     compilable_methods(T::Type) -> Vector{Symbol}
 
 All method names registered for `T` (including those registered for any of
-its supertypes).
+its supertypes). Enumerates BOTH the Dict cache AND the method-table
+fallback (which captures cross-module precompile-safe registrations).
 """
 function compilable_methods(T::Type)
-    methods = Set{Symbol}()
-    for (key, _) in _COMPILABLE_METHODS
-        rt, nm = key
-        if T <: rt
-            push!(methods, nm)
-        end
+    names = Set{Symbol}()
+    # 1. Dict cache (covers same-module registrations).
+    for ((rt, nm), _) in _COMPILABLE_METHODS
+        T <: rt && push!(names, nm)
     end
-    return sort(collect(methods))
+    # 2. Method-table fallback. Each `_compilable_entry_dispatch` overload has
+    # signature `Tuple{Type{R}, Val{NameSym}}` — recover `(R, NameSym)` by
+    # introspecting `m.sig.parameters`. Any `R` such that `T <: R` matches.
+    for m in methods(_compilable_entry_dispatch)
+        params = Base.unwrap_unionall(m.sig).parameters
+        length(params) >= 3 || continue
+        # params[1] = typeof(_compilable_entry_dispatch); [2] = Type{R}; [3] = Val{name}
+        type_param = params[2]
+        val_param = params[3]
+        type_param isa DataType && type_param.name === Type.body.name || continue
+        val_param isa DataType && val_param.name === Val.body.name || continue
+        R = type_param.parameters[1]
+        nm = val_param.parameters[1]
+        nm isa Symbol || continue
+        T <: R && push!(names, nm)
+    end
+    return sort(collect(names))
 end
 
 # ── Display ───────────────────────────────────────────────────────────────────

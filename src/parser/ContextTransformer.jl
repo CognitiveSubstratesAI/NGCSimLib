@@ -20,25 +20,29 @@
 
 # ── Helper: resolve a chain like `c.field` or `c.sub.field` on the instance ──
 
-"""
-    _resolve_field_chain(instance, head::Expr) -> Union{Compartment, Nothing}
+# Sentinel returned by `_resolve_field_chain_value` when the dotted chain
+# can't be walked on the live instance (typical case: module access like
+# `NGCSimLib.set!` where `NGCSimLib` is a Module, not the receiver).
+const _UNRESOLVED_FIELD_CHAIN = :__NGCSimLib_unresolved_field_chain__
 
-Given a receiver instance and an `Expr` of the form `recv.a.b.c…`, walk
-the chain on the instance and return the resolved Compartment, or
-`nothing` if any step fails or the leaf isn't a Compartment.
-
-Used by the transformer to decide whether a `getproperty` chain should be
-rewritten to a `ctx[key]` read.
 """
-function _resolve_field_chain(instance, head::Expr)
-    head.head === :. || return nothing
+    _resolve_field_chain_value(instance, head::Expr) -> Any
+
+Walk the dotted chain `head` on `instance` via `getproperty` and return the
+final resolved value, OR the sentinel `_UNRESOLVED_FIELD_CHAIN` if any step
+fails. Unlike [`_resolve_field_chain`](@ref) this returns ALL resolved
+values, not just Compartments — used by the visitor to inline scalar
+hyperparameter accesses (`c.tau_m`, `c.is_stateful`, etc.) as trace-time
+constants.
+"""
+function _resolve_field_chain_value(instance, head::Expr)
+    head.head === :. || return _UNRESOLVED_FIELD_CHAIN
     # Linearise the chain into innermost-first field path:
     # `:(c.a.b.c)` is `Expr(:., Expr(:., Expr(:., :c, :(:a)), :(:b)), :(:c))`.
-    # We descend, collecting fields, until we hit the root Symbol.
     path = Symbol[]
     cur = head
     while cur isa Expr && cur.head === :.
-        length(cur.args) == 2 || return nothing
+        length(cur.args) == 2 || return _UNRESOLVED_FIELD_CHAIN
         field = cur.args[2]
         f = if field isa QuoteNode
             field.value
@@ -47,19 +51,35 @@ function _resolve_field_chain(instance, head::Expr)
         else
             nothing
         end
-        f === nothing && return nothing
+        f === nothing && return _UNRESOLVED_FIELD_CHAIN
         push!(path, f)
         cur = cur.args[1]
     end
-    cur isa Symbol || return nothing
-    # Walk in reverse (outer-most field first since we appended inner-first).
+    cur isa Symbol || return _UNRESOLVED_FIELD_CHAIN
     reverse!(path)
     val = instance
     for f in path
-        hasproperty(val, f) || return nothing
+        hasproperty(val, f) || return _UNRESOLVED_FIELD_CHAIN
         val = getproperty(val, f)
     end
-    val isa Compartment ? val : nothing
+    return val
+end
+
+"""
+    _resolve_field_chain(instance, head::Expr) -> Union{Compartment, Nothing}
+
+Compartment-only convenience: returns the resolved value when it's a
+Compartment, `nothing` in every other case (unresolved chain OR resolved
+to a non-Compartment value). Used at the `set!` / `get_value` call sites
+where only the Compartment branch is meaningful.
+
+For the value-inlining path used by `c.field` direct access, see
+[`_resolve_field_chain_value`](@ref).
+"""
+function _resolve_field_chain(instance, head::Expr)
+    val = _resolve_field_chain_value(instance, head)
+    val === _UNRESOLVED_FIELD_CHAIN && return nothing
+    return val isa Compartment ? val : nothing
 end
 
 # ── The transformer ──────────────────────────────────────────────────────────
@@ -110,15 +130,33 @@ _callee_is(callee, sym::Symbol) =
     )
 
 function visit_expr(t::ContextTransformer, e::Expr)
-    # 1. Compartment field access:  c.field  or  c.sub.field
+    # 1. Field access:  c.field  or  c.sub.field
     if e.head === :.
-        comp = _resolve_field_chain(t.instance, e)
-        if comp !== nothing && comp.root_target !== nothing
-            push!(t.needed_keys, comp.root_target)
-            return :($(t.ctx_sym)[$(comp.root_target)])
+        val = _resolve_field_chain_value(t.instance, e)
+        if val === _UNRESOLVED_FIELD_CHAIN
+            # Chain doesn't walk on the instance (e.g., `NGCSimLib.set!`
+            # where the head is a Module). Leave structure alone.
+            return e
+        elseif val isa Compartment
+            if val.root_target !== nothing
+                push!(t.needed_keys, val.root_target)
+                return :($(t.ctx_sym)[$(val.root_target)])
+            else
+                # Pre-`setup!` Compartment in a method body — leave the
+                # access untouched. (Compartments owned by a Component
+                # going through parse_method should always be set up via
+                # post_init!; falling here means the body referenced one
+                # that wasn't, and we can't synthesize a key.)
+                return e
+            end
+        else
+            # Non-Compartment field — scalar hyperparameter, Bool flag,
+            # function field, etc. Inline as a trace-time literal. Julia's
+            # AST accepts arbitrary values as literal nodes, so embedding
+            # the resolved value directly produces a valid Expr that no
+            # longer references the original receiver `c`.
+            return val
         end
-        # Fallthrough: leave structure alone (rare — dotted module access etc.)
-        return e
     end
 
     # 2. set!(c.field, value) → ctx[key] = visit(value)

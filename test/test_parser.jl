@@ -88,6 +88,107 @@ end
     @test rewritten == :(return ctx)
 end
 
+# ── Scalar hyperparameter inlining ────────────────────────────────────────────
+# A component with both Compartment fields AND scalar hyperparameters
+# (tau_m, is_stateful, ...). The Parser must rewrite Compartment access to
+# ctx[key] AND inline scalar fields as trace-time literals — leaving the
+# rewritten function `c`-free so it can be invoked with only `ctx` + kwargs.
+
+mutable struct _ScalarHyperNeuron <: NGCSimLib.AbstractComponent
+    name::String
+    context_path::String
+    args::Vector{Any}
+    kwargs::Dict{Symbol, Any}
+    # Scalar hyperparameters (NOT compartments)
+    tau_m::Float64
+    is_stateful::Bool
+    label::String
+    fx::Function
+    # Compartments
+    voltage::NGCSimLib.Compartment{Vector{Float64}}
+end
+
+_make_scalar_neuron(name::String) = _ScalarHyperNeuron(
+    name, "", Any[], Dict{Symbol, Any}(),
+    7.5,                            # tau_m
+    true,                           # is_stateful
+    "alpha",                        # label
+    (x) -> x .* 2.0,                # fx
+    NGCSimLib.Compartment([0.0, 0.0, 0.0])
+)
+
+@testset "ContextTransformer inlines scalar hyperparameter access" begin
+    NGCSimLib.clear_contexts!()
+    NGCSimLib.reset_global_state!()
+    c = _make_scalar_neuron("p")
+    NGCSimLib.post_init!(c)
+
+    t = NGCSimLib.ContextTransformer(c)
+    # Numeric scalar: inlined verbatim as a literal node.
+    @test NGCSimLib.visit(t, :(c.tau_m)) == 7.5
+    # Boolean: same — embedded as literal.
+    @test NGCSimLib.visit(t, :(c.is_stateful)) == true
+    # String: same.
+    @test NGCSimLib.visit(t, :(c.label)) == "alpha"
+    # Function: same — the rewritten Expr now has a function-value literal.
+    fx_inlined = NGCSimLib.visit(t, :(c.fx))
+    @test fx_inlined isa Function
+    @test fx_inlined([1.0, 2.0]) == [2.0, 4.0]
+end
+
+@testset "ContextTransformer: scalar inline AND Compartment rewrite coexist" begin
+    NGCSimLib.clear_contexts!()
+    NGCSimLib.reset_global_state!()
+    c = _make_scalar_neuron("p")
+    NGCSimLib.post_init!(c)
+
+    t = NGCSimLib.ContextTransformer(c)
+    # Mixed expression: voltage compartment + tau_m scalar in one binop.
+    # The rewrite must turn each leaf appropriately.
+    rewritten = NGCSimLib.visit(t, :(c.voltage .+ c.tau_m))
+    @test rewritten == :(ctx["p:voltage"] .+ 7.5)
+    @test "p:voltage" in t.needed_keys
+end
+
+@testset "ContextTransformer leaves unresolved chains alone (module access)" begin
+    NGCSimLib.clear_contexts!()
+    c = _make_scalar_neuron("p")
+    NGCSimLib.post_init!(c)
+    t = NGCSimLib.ContextTransformer(c)
+    # `NGCSimLib.set!` — the head `NGCSimLib` is NOT a field of `c`, so the
+    # chain is unresolvable on the instance. Must pass through unchanged.
+    rewritten = NGCSimLib.visit(t, :(NGCSimLib.set!))
+    @test rewritten == :(NGCSimLib.set!)
+end
+
+@testset "parse_method end-to-end with scalar fields in body" begin
+    # Define a @compilable method that REFERENCES a scalar hyperparameter.
+    # Before the fix, the rewritten function dangled with a bare `c.tau_m`.
+    # After the fix, `c.tau_m` is inlined and the function runs with only ctx.
+    NGCSimLib.clear_contexts!()
+    NGCSimLib.reset_global_state!()
+    NGCSimLib.clear_compiled!()
+
+    NGCSimLib.@compilable function _scalar_advance!(c::_ScalarHyperNeuron, dt)
+        # Body uses BOTH compartment access AND scalar field access.
+        NGCSimLib.set!(c.voltage,
+            NGCSimLib.get_value(c.voltage) .+ dt ./ c.tau_m)
+        return c
+    end
+
+    c = _make_scalar_neuron("p")
+    NGCSimLib.post_init!(c)
+    cm = NGCSimLib.parse_method(c, :_scalar_advance!)
+    @test cm isa NGCSimLib.CompiledMethod
+
+    # The compiled function should run successfully — the rewritten body
+    # references neither `c` nor `c.tau_m` (the latter was inlined as 7.5).
+    ctx = Dict{String, Any}("p:voltage" => [10.0, 20.0, 30.0])
+    out = cm(ctx; dt=1.5)
+    # dz = dt / tau_m = 1.5 / 7.5 = 0.2  →  ctx["p:voltage"] .+= 0.2
+    @test out["p:voltage"] ≈ [10.2, 20.2, 30.2]
+end
+
 # ── KwargsTransformer ─────────────────────────────────────────────────────────
 
 @testset "KwargsTransformer rewrites kwargs[KEY] → KEY" begin

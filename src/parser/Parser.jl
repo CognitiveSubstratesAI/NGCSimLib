@@ -20,7 +20,9 @@
 #   - upstream uses `inspect.getsource` + `ast.parse` to recover the source,
 #     then `compile()` + `exec()` to install the rewritten function
 #   - we capture the body Expr at @compilable definition time via QuoteNode,
-#     and use `Core.eval(Main, …)` to install the rewritten function
+#     and use `Core.eval(<defining module>, …)` to install the rewritten
+#     function — the defining module is captured by the @compilable macro
+#     so module-local names (e.g. private helpers) resolve correctly.
 #
 # Phase A scope:
 #   - parse_method(instance, method_sym) → CompiledMethod
@@ -63,7 +65,13 @@ struct CompiledMethod
     signature_kwargs::Vector{Symbol}
 end
 
-(cm::CompiledMethod)(args...; kwargs...) = cm.fn(args...; kwargs...)
+# `parse_method` defines `fn` via `Core.eval(Main, ...)` at runtime, which
+# bumps the world age. Calls from the caller's world (older than the eval'd
+# method) would hit a "method too new" MethodError; `invokelatest` reaches
+# the freshest world. The wrapper cost is one dynamic dispatch per call —
+# negligible against the compiled-method body itself.
+(cm::CompiledMethod)(args...; kwargs...) =
+    Base.invokelatest(cm.fn, args...; kwargs...)
 
 # Pretty-printed source. Mirrors upstream `CompiledMethod.code` property.
 function code(cm::CompiledMethod)
@@ -152,8 +160,12 @@ function parse_method(instance::AbstractComponent, method_name::Symbol;
         body_rewritten2
     )
 
-    # Eval the function in Main so it's reachable; capture the Function value.
-    fn_val = Core.eval(Main, fn_expr)
+    # Eval the function back in the module the @compilable was declared in —
+    # this is what makes module-local names (e.g. NGCLearn's `_dfv_lif`)
+    # resolve correctly. Falls back to `Main` for entries that pre-date the
+    # `mod` field.
+    target_mod = hasproperty(entry, :mod) ? entry.mod : Main
+    fn_val = Core.eval(target_mod, fn_expr)
 
     # signature_kwargs: every name in the rewritten kwargs block (both
     # promoted positionals + originally-kwarg names). The Process runner
