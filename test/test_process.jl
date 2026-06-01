@@ -24,6 +24,31 @@ NGCSimLib.@compilable function _proc_reset!(c::_ProcNeuron)
     return c
 end
 
+# Probe component exercising the FULL JIT-rewrite surface: a scalar
+# hyperparameter (`floor`, inlined as a literal) used inside an explicit
+# BROADCAST (`max.(...)`, which shares AST head `:.` with field access). This
+# is the shape that previously left a dangling `c.floor` in the pure function
+# and that, once compiled, must still be invokable in the same world-age.
+mutable struct _ProcScalarNeuron <: NGCSimLib.AbstractComponent
+    name::String
+    context_path::String
+    args::Vector{Any}
+    kwargs::Dict{Symbol, Any}
+    floor::Float64                                  # scalar hyperparameter
+    voltage::NGCSimLib.Compartment{Vector{Float64}}
+end
+
+_make_proc_scalar_neuron(name::String, floor::Float64=-2.0) = _ProcScalarNeuron(
+    name, "", Any[], Dict{Symbol, Any}(), floor, NGCSimLib.Compartment(zeros(3))
+)
+
+NGCSimLib.@compilable function _proc_scalar_advance!(c::_ProcScalarNeuron, dt::Float64)
+    # integrate, then clamp the floor via a broadcast over a scalar field
+    v = NGCSimLib.get_value(c.voltage) .- dt
+    NGCSimLib.set!(c.voltage, max.(v, c.floor))
+    return c
+end
+
 # ── MethodProcess basics ──────────────────────────────────────────────────────
 
 @testset "MethodProcess construction defaults" begin
@@ -87,6 +112,44 @@ end
     # Instead: validate that compile_process! ran without error and
     # `compiled` is set.
     @test p.compiled !== nothing
+end
+
+@testset "compile_process! runs end-to-end and matches the eager path" begin
+    # Regression for the world-age fix: the compiled runner calls each step via
+    # the CompiledMethod callable (invokelatest), so a Process compiled AND run
+    # in the same scope must execute (no "method too new") and produce the same
+    # result as plain eager dispatch — including a scalar field used inside a
+    # broadcast (`max.(v, c.floor)`), the previously-dangling shape.
+    NGCSimLib.clear_contexts!()
+    NGCSimLib.reset_global_state!()
+    NGCSimLib.clear_compiled!()
+
+    # JIT path: build under a Context, compile, run one step.
+    local p
+    NGCSimLib.Context("jit_e2e") do _ctx
+        c = _make_proc_scalar_neuron("z", -2.0)
+        NGCSimLib.post_init!(c)
+        NGCSimLib.set!(c.voltage, [0.0, -1.5, 5.0])
+        p = NGCSimLib.MethodProcess(name="step")
+        p >> (c, :_proc_scalar_advance!)
+        NGCSimLib.post_init!(p)
+    end
+    NGCSimLib.compile_process!(p)
+    out_ctx, _ = NGCSimLib.run(p; dt=1.0)
+    jit_v = out_ctx["jit_e2e:z:voltage"]
+    # Hand-computed: v .- 1 = [-1, -2.5, 4]; max.(_, -2) = [-1, -2, 4].
+    @test jit_v == [-1.0, -2.0, 4.0]
+
+    # Eager path on an identical fresh cell — must match bit-for-bit.
+    NGCSimLib.clear_contexts!()
+    NGCSimLib.reset_global_state!()
+    NGCSimLib.Context("eager_e2e") do _ctx
+        c2 = _make_proc_scalar_neuron("z", -2.0)
+        NGCSimLib.post_init!(c2)
+        NGCSimLib.set!(c2.voltage, [0.0, -1.5, 5.0])
+        _proc_scalar_advance!(c2, 1.0)   # defined in this (Main) test module
+        @test NGCSimLib.get_value(c2.voltage) == jit_v
+    end
 end
 
 @testset "watch! + compiled returns watched tuple" begin

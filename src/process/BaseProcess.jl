@@ -252,7 +252,12 @@ function compile_process!(p::AbstractProcess)
                 cm = get_compiled(c, m)
                 # Pass only the kwargs this step's signature actually accepts.
                 step_kw = (; (k => kw_full[k] for k in step_kwargs[si])...)
-                out_ctx = cm.fn(out_ctx; step_kw...)
+                # Call through the CompiledMethod callable (NOT `cm.fn`
+                # directly): its `Base.invokelatest` wrapper reaches the world
+                # in which the rewritten `fn` was `Core.eval`'d, so a Process
+                # compiled + run in the same scope doesn't hit a "method too
+                # new" MethodError. See CompiledMethod's call op in Parser.jl.
+                out_ctx = cm(out_ctx; step_kw...)
             end
             # Watched tuple: final values of every compartment in watch_list
             watched_vals = Tuple(out_ctx[w.root_target] for w in watched)
