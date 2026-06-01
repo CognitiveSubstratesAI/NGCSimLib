@@ -134,9 +134,16 @@ function visit_expr(t::ContextTransformer, e::Expr)
     if e.head === :.
         val = _resolve_field_chain_value(t.instance, e)
         if val === _UNRESOLVED_FIELD_CHAIN
-            # Chain doesn't walk on the instance (e.g., `NGCSimLib.set!`
-            # where the head is a Module). Leave structure alone.
-            return e
+            # The `:.` head is NOT a field chain on the instance. Two cases:
+            #   - a module-qualified name (`NGCSimLib.set!`), or
+            #   - an explicit broadcast `f.(args)` (which ALSO has head `:.`,
+            #     with args[2] the call's argument tuple).
+            # In both cases we must still RECURSE into the subtree (case 5) —
+            # otherwise a broadcast like `max.(_v, c.v_min)` would be returned
+            # verbatim and any `c.field` nested inside it would never be
+            # rewritten (leaving a dangling receiver ref in the pure function).
+            # Module-qualified names reconstruct identically under the walk.
+            return Expr(e.head, [visit(t, a) for a in e.args]...)
         elseif val isa Compartment
             if val.root_target !== nothing
                 push!(t.needed_keys, val.root_target)

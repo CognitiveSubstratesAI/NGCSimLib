@@ -161,6 +161,26 @@ end
     @test rewritten == :(NGCSimLib.set!)
 end
 
+@testset "ContextTransformer recurses into explicit broadcasts f.(...)" begin
+    # Regression: an explicit broadcast `f.(args)` has AST head `:.` — the SAME
+    # head as field access `c.field`. The transformer must still RECURSE into
+    # the broadcast's argument tuple so that any `c.field` nested inside gets
+    # rewritten. Before the fix, `max.(_v, c.tau_m)` was returned verbatim,
+    # leaving a dangling `c.tau_m` (and any `c.voltage`) in the pure function.
+    NGCSimLib.clear_contexts!()
+    NGCSimLib.reset_global_state!()
+    c = _make_scalar_neuron("p")
+    NGCSimLib.post_init!(c)
+    t = NGCSimLib.ContextTransformer(c)
+
+    # Scalar field inside a broadcast → inlined literal.
+    @test NGCSimLib.visit(t, :(max.(_v, c.tau_m))) == :(max.(_v, 7.5))
+    # Compartment field inside a broadcast → ctx[key], and key recorded.
+    rewritten = NGCSimLib.visit(t, :(max.(c.voltage, c.tau_m)))
+    @test rewritten == :(max.(ctx["p:voltage"], 7.5))
+    @test "p:voltage" in t.needed_keys
+end
+
 @testset "parse_method end-to-end with scalar fields in body" begin
     # Define a @compilable method that REFERENCES a scalar hyperparameter.
     # Before the fix, the rewritten function dangled with a bare `c.tau_m`.
